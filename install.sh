@@ -258,4 +258,34 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
 fi
 
+# --- post-install self-check: confirm it actually works, don't leave the user to
+# discover breakage from the dashboard ------------------------------------------
+if command -v systemctl >/dev/null 2>&1 && [ -f "$CONF_DIR/agent.conf" ]; then
+  sleep 3
+  printf '\n\033[1m=== Outpost self-check ===\033[0m\n'
+
+  if systemctl is-active --quiet outpost-agent; then
+    log "service: active (running as $RUN_USER)"
+  else
+    warn "service is NOT active — see: journalctl -u outpost-agent -n 50 --no-pager"
+  fi
+
+  # 403 in the log means the device key was rejected (revoked / wrong token).
+  if journalctl -u outpost-agent -n 30 --no-pager 2>/dev/null | grep -qi "403\|unauthorized\|forbidden"; then
+    warn "agent is being rejected (403) — revoke the old device or re-enroll with a fresh token"
+  fi
+
+  # Report exactly what the running agent uses for hooks + whether deploy is seen.
+  hk="$($SUDO -u "$RUN_USER" env OUTPOST_HOOKS_DIR="$HOOKS_DIR" "$INSTALL_DIR/$BINARY" hook ls 2>/dev/null || true)"
+  printf '%s\n' "$hk"
+  case "$hk" in
+    *"deploy"*) log "deploy hook detected — the dashboard Deploy button will run it ✅" ;;
+    *) log "no deploy hook yet — create one (no sudo, no chmod):" ;;
+  esac
+  case "$hk" in
+    *"deploy"*) ;;
+    *) printf '    \033[1msudo -u %s outpost-agent hook edit deploy\033[0m\n' "$RUN_USER" ;;
+  esac
+fi
+
 log "done."
