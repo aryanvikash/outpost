@@ -158,21 +158,26 @@ validated. The agent needs a narrow `sudoers` grant for its deploy commands; see
 ### Custom commands (host hooks)
 
 For any stack (Python/supervisor, docker-compose, a `pull`/`migrate` step, …),
-drop an executable script in the agent's hooks dir (`/etc/outpost/hooks/`) and run
-it by name — **no command string ever crosses the wire**:
+drop an executable script in the agent's hooks dir and run it by name — **no
+command string ever crosses the wire**. The hooks dir is `$OUTPOST_HOOKS_DIR`,
+defaulting to:
+
+- **`~/.config/outpost/hooks/`** for a rootless/user install (no sudo), or
+- **`/etc/outpost/hooks/`** for the systemd system service.
 
 ```sh
-sudo install -D -o root -g root -m 0755 \
-  packaging/hooks/deploy.example /etc/outpost/hooks/deploy   # custom deploy
-sudo install -D -o root -g root -m 0755 my-pull /etc/outpost/hooks/pull
+# rootless (no sudo):
+install -D -m 0755 packaging/hooks/deploy.example ~/.config/outpost/hooks/deploy
+# system service:
+sudo install -D -m 0755 packaging/hooks/deploy.example /etc/outpost/hooks/deploy
 ```
 
-- `deploy` runs `/etc/outpost/hooks/deploy` if present (else the built-in PM2 flow).
-- `run-hook` runs any `/etc/outpost/hooks/<name>` — these surface in the dashboard
-  as one-click **Custom commands** buttons.
-- The agent **refuses** a hook that is group/world-writable or owned by the agent
-  user, so a compromised agent/control plane can't rewrite what runs. Validated
-  params arrive as env vars (`OUTPOST_BRANCH`, `OUTPOST_APP_DIR`, …).
+- `deploy` runs `<hooks>/deploy` if present (else the built-in PM2 flow).
+- `run-hook` runs any `<hooks>/<name>` — these surface in the dashboard as
+  one-click **Custom commands** buttons.
+- The agent **refuses** a hook that is group/world-writable (so other users on the
+  box can't tamper with it). Validated params arrive as env vars
+  (`OUTPOST_BRANCH`, `OUTPOST_APP_DIR`, …).
 
 The control plane only ever sends the action/hook **name** (validated) — the
 commands live on the host, authored by someone who already controls it.

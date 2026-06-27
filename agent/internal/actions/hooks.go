@@ -18,12 +18,28 @@ import (
 
 var hookNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
-func hooksDir() string { return envOr("OUTPOST_HOOKS_DIR", "/etc/outpost/hooks") }
+// hooksDir resolves where host hooks live, no sudo required for user installs:
+//   - $OUTPOST_HOOKS_DIR if set (the systemd unit sets /etc/outpost/hooks);
+//   - else the per-user config dir (~/.config/outpost/hooks on Linux) — writable
+//     without root;
+//   - else /etc/outpost/hooks as a last resort.
+func hooksDir() string {
+	if v := os.Getenv("OUTPOST_HOOKS_DIR"); v != "" {
+		return v
+	}
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "outpost", "hooks")
+	}
+	return "/etc/outpost/hooks"
+}
 
 func validHookName(name string) bool { return hookNameRe.MatchString(name) }
 
 // checkHook validates a hook is safe to run: a regular, executable file that is
-// not group/world-writable and not owned by the agent user.
+// not group/world-writable (so other users on the box can't tamper with it). In
+// a system install, the hooks dir is root-owned so the agent can't modify hooks;
+// in a rootless install the agent and the hook author are the same user, so no
+// further ownership check applies.
 func checkHook(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -37,9 +53,6 @@ func checkHook(path string) error {
 	}
 	if info.Mode().Perm()&0o022 != 0 {
 		return fmt.Errorf("must not be group/world writable")
-	}
-	if hookOwnedByAgent(info) {
-		return fmt.Errorf("must not be owned by the agent user")
 	}
 	return nil
 }
