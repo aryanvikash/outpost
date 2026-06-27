@@ -36,6 +36,21 @@ if [ "$(id -u)" -ne 0 ]; then
   SUDO="sudo"
 fi
 
+# --- uninstall: curl -fsSL .../install.sh | sh -s uninstall ------------------
+if [ "${1:-}" = "uninstall" ]; then
+  if command -v outpost-agent >/dev/null 2>&1; then
+    exec $SUDO outpost-agent uninstall --yes
+  fi
+  log "removing outpost-agent"
+  $SUDO systemctl disable --now outpost-agent 2>/dev/null || true
+  $SUDO rm -f /lib/systemd/system/outpost-agent.service /etc/systemd/system/outpost-agent.service
+  $SUDO systemctl daemon-reload 2>/dev/null || true
+  $SUDO rm -f "$INSTALL_DIR/$BINARY"
+  $SUDO rm -rf "$CONF_DIR"
+  log "uninstalled. Remember to revoke the device in the dashboard."
+  exit 0
+fi
+
 # --- detect platform ---------------------------------------------------------
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "$os" in

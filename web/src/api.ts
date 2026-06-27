@@ -113,6 +113,13 @@ export async function revokeMachine(id: string): Promise<void> {
   await request(`/api/machines/${id}/revoke`, { method: "POST" });
 }
 
+export async function renameMachine(id: string, name: string): Promise<void> {
+  await request(`/api/machines/${id}/rename`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
 export async function createEnrollToken(input: {
   label?: string;
   uses?: number;

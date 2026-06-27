@@ -10,6 +10,7 @@ import {
   Server,
   ScrollText,
   Terminal,
+  Pencil,
   Loader2,
   RadioTower,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import {
   listMachines,
   listJobs,
   revokeMachine,
+  renameMachine,
   createEnrollToken,
   enqueueJob,
   apiBase,
@@ -197,6 +199,8 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
   const [branch, setBranch] = useState("main");
   const [app, setApp] = useState("");
   const [lastJob, setLastJob] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
 
   const jobs = useQuery({
     queryKey: ["jobs", machineId],
@@ -229,12 +233,63 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
     onSuccess: () => qc.invalidateQueries({ queryKey: ["machines"] }),
   });
 
+  const rename = useMutation({
+    mutationFn: (name: string) => renameMachine(machineId, name),
+    onSuccess: () => {
+      setEditing(false);
+      qc.invalidateQueries({ queryKey: ["machines"] });
+    },
+  });
+
   return (
     <Card>
       <CardHeader>
-        <div>
-          <CardTitle className="text-base">{machine?.name ?? "Machine"}</CardTitle>
-          <code className="font-mono text-[11px] text-muted-foreground">{machineId}</code>
+        <div className="min-w-0">
+          {editing ? (
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (draft.trim()) rename.mutate(draft.trim());
+              }}
+            >
+              <Input
+                value={draft}
+                autoFocus
+                maxLength={64}
+                onChange={(e) => setDraft(e.target.value)}
+                className="h-8 w-52"
+              />
+              <Button size="sm" type="submit" disabled={rename.isPending || !draft.trim()}>
+                {rename.isPending ? <Loader2 className="animate-spin" /> : null} Save
+              </Button>
+              <Button size="sm" variant="ghost" type="button" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </form>
+          ) : (
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base">{machine?.name ?? "Machine"}</CardTitle>
+              <button
+                title="Rename"
+                className="text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => {
+                  setDraft(machine?.name ?? "");
+                  setEditing(true);
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="mt-0.5 flex items-center gap-2">
+            <code className="font-mono text-[11px] text-muted-foreground">{machineId}</code>
+            {machine?.agentVersion && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                agent {machine.agentVersion}
+              </Badge>
+            )}
+          </div>
         </div>
         <Button
           variant="destructive"

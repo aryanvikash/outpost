@@ -6,17 +6,22 @@
 //
 //	outpost-agent add --url wss://host/connect --token oet_...   # first-time enroll
 //	outpost-agent [--config /etc/outpost/agent.conf]             # run (default)
+//	outpost-agent uninstall [--yes] [--remove-user]              # stop + remove
 //	outpost-agent --version
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/aryanvikash/outpost/agent/internal/actions"
@@ -30,15 +35,109 @@ import (
 var version = "dev"
 
 func main() {
-	// Subcommand dispatch: `add` enrolls; anything else runs the agent.
-	if len(os.Args) > 1 && os.Args[1] == "add" {
-		if err := runAdd(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "enroll failed: %v\n", err)
-			os.Exit(1)
+	// Subcommand dispatch: `add` enrolls, `uninstall` removes; else run the agent.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "add":
+			if err := runAdd(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "enroll failed: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "uninstall":
+			if err := runUninstall(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "uninstall failed: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
 	}
 	runAgent()
+}
+
+// runUninstall stops the service and removes the agent, its config, and device
+// key. Run with sudo for a system install. It cannot revoke the device server-
+// side (that needs admin auth), so it prints a reminder.
+func runUninstall(args []string) error {
+	fs := flag.NewFlagSet("uninstall", flag.ExitOnError)
+	configPath := fs.String("config", config.DefaultPath, "config path (to locate key/config + machine id)")
+	keepConfig := fs.Bool("keep-config", false, "keep the config dir + device key")
+	removeUser := fs.Bool("remove-user", false, "also delete the 'outpost' service user")
+	yes := fs.Bool("yes", false, "do not prompt for confirmation")
+	_ = fs.Parse(args)
+
+	machineID := ""
+	if cfg, err := config.Load(*configPath); err == nil {
+		machineID = cfg.MachineID
+	}
+
+	if !*yes {
+		msg := "This stops and removes the Outpost agent"
+		if !*keepConfig {
+			msg += " and deletes its config + device key"
+		}
+		fmt.Printf("%s.\nContinue? [y/N]: ", msg)
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if s := strings.TrimSpace(strings.ToLower(line)); s != "y" && s != "yes" {
+			fmt.Println("aborted")
+			return nil
+		}
+	}
+
+	step := func(desc string, fn func() error) {
+		if err := fn(); err != nil {
+			fmt.Printf("  - %s: %v\n", desc, err)
+		} else {
+			fmt.Printf("  ✓ %s\n", desc)
+		}
+	}
+	hasCmd := func(name string) bool { _, err := exec.LookPath(name); return err == nil }
+	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
+
+	if hasCmd("systemctl") {
+		step("stop + disable service", func() error {
+			return exec.Command("systemctl", "disable", "--now", "outpost-agent").Run()
+		})
+	}
+	for _, unit := range []string{
+		"/lib/systemd/system/outpost-agent.service",
+		"/etc/systemd/system/outpost-agent.service",
+	} {
+		if exists(unit) {
+			u := unit
+			step("remove "+u, func() error { return os.Remove(u) })
+		}
+	}
+	if hasCmd("systemctl") {
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+	}
+
+	self, _ := os.Executable()
+	if self != "" {
+		step("remove "+self, func() error { return os.Remove(self) })
+	}
+	if p := "/usr/local/bin/outpost-agent"; p != self && exists(p) {
+		step("remove "+p, func() error { return os.Remove(p) })
+	}
+
+	if !*keepConfig {
+		dir := filepath.Dir(*configPath)
+		step("remove config dir "+dir, func() error { return os.RemoveAll(dir) })
+	}
+	if *removeUser && hasCmd("userdel") {
+		step("remove service user 'outpost'", func() error {
+			return exec.Command("userdel", "outpost").Run()
+		})
+	}
+
+	fmt.Println("\nUninstalled.")
+	if machineID != "" {
+		fmt.Printf("IMPORTANT: revoke this device so its key can't reconnect:\n")
+		fmt.Printf("  dashboard → machine %s → Revoke  (or POST /api/machines/%s/revoke)\n", machineID, machineID)
+	} else {
+		fmt.Println("IMPORTANT: revoke this device in the control plane (dashboard → Revoke).")
+	}
+	return nil
 }
 
 // runAdd implements `outpost-agent add`: generate a device keypair, register the
