@@ -12,6 +12,9 @@ Group=outpost
 ExecStart=/usr/local/bin/outpost-agent --config /etc/outpost/agent.conf
 Restart=always
 RestartSec=5
+# System installs keep hooks in /etc (root-owned). For a rootless/user install
+# (agent run as yourself, no systemd) hooks default to ~/.config/outpost/hooks.
+Environment=OUTPOST_HOOKS_DIR=/etc/outpost/hooks
 # The agent reconnects on its own; this restart is only for crashes.
 
 # --- Hardening ---------------------------------------------------------------
