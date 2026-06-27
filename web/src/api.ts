@@ -194,6 +194,9 @@ export function connectWssUrl(): string {
 export function webhookUrl(): string {
   return `${apiBase()}/webhooks/github`;
 }
+export function bitbucketWebhookUrl(): string {
+  return `${apiBase()}/webhooks/bitbucket`;
+}
 
 export interface Delivery {
   id: number;

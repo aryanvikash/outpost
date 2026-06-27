@@ -14,6 +14,7 @@ import { LoginPage } from "./routes/login";
 import { DashboardPage } from "./routes/dashboard";
 import { JobPage } from "./routes/job";
 import { GitHubPage } from "./routes/github";
+import { BitbucketPage } from "./routes/bitbucket";
 
 function requireAuth() {
   if (!getToken()) throw redirect({ to: "/login" });
@@ -51,6 +52,7 @@ const rootRoute = createRootRoute({
             <nav className="ml-8 flex items-center gap-1">
               <NavLink to="/">Fleet</NavLink>
               <NavLink to="/github">GitHub</NavLink>
+              <NavLink to="/bitbucket">Bitbucket</NavLink>
             </nav>
           )}
           <div className="ml-auto flex items-center gap-3">
@@ -109,11 +111,19 @@ const githubRoute = createRoute({
   component: GitHubPage,
 });
 
+const bitbucketRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/bitbucket",
+  beforeLoad: requireAuth,
+  component: BitbucketPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   dashboardRoute,
   jobRoute,
   githubRoute,
+  bitbucketRoute,
 ]);
 
 export const router = createRouter({ routeTree });
