@@ -268,15 +268,16 @@ runtime/config capability.
 | `run-hook`    | no         | `{ name: string }`                      | runs a host-defined hook script by name  |
 
 **Host hooks (custom commands).** An operator may place executable scripts in the
-agent's hooks dir (default `/etc/outpost/hooks/`). `run-hook` runs `<dir>/<name>`;
-`deploy` runs `<dir>/deploy` if it exists (falling back to the built-in PM2 flow).
-This is how arbitrary stacks (pip/supervisor, docker-compose, …) are supported
-**without ever sending a command string over the wire** — the control plane sends
-only the hook *name* (validated `^[a-z0-9][a-z0-9_-]{0,63}$`); the commands live on
-the host. The agent refuses any hook that is group/world-writable or owned by the
-agent user, so a compromised agent can't rewrite what runs. Validated params are
-passed as env vars (e.g. `OUTPOST_BRANCH`); the agent reports available hooks and
-the deploy mode in `hello`.
+agent's hooks dir — `$OUTPOST_HOOKS_DIR`, defaulting to `~/.config/outpost/hooks/`
+for a rootless/user install (no sudo needed) or `/etc/outpost/hooks/` for the
+systemd system service. `run-hook` runs `<dir>/<name>`; `deploy` runs
+`<dir>/deploy` if it exists (falling back to the built-in PM2 flow). This is how
+arbitrary stacks (pip/supervisor, docker-compose, …) are supported **without ever
+sending a command string over the wire** — the control plane sends only the hook
+*name* (validated `^[a-z0-9][a-z0-9_-]{0,63}$`); the commands live on the host. The
+agent refuses any hook that is **group/world-writable** (so other users can't
+tamper with it). Validated params are passed as env vars (e.g. `OUTPOST_BRANCH`);
+the agent reports available hooks and the deploy mode in `hello`.
 
 **Param validation is mandatory and lives in the agent.** Example constraints:
 

@@ -1,10 +1,13 @@
 #!/bin/sh
 # Example Outpost deploy hook (custom command).
 #
-# Install as /etc/outpost/hooks/deploy, owned by root, NOT writable by the
-# outpost agent user, and executable:
+# Install it as the "deploy" hook (must be executable, not group/world-writable):
 #
-#   sudo install -D -o root -g root -m 0755 deploy.example /etc/outpost/hooks/deploy
+#   # rootless / user install (no sudo):
+#   install -D -m 0755 deploy.example ~/.config/outpost/hooks/deploy
+#
+#   # systemd system service:
+#   sudo install -D -m 0755 deploy.example /etc/outpost/hooks/deploy
 #
 # The agent runs this when a `deploy` job arrives, instead of the built-in PM2
 # flow. It receives validated params as environment variables:
