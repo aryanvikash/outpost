@@ -57,3 +57,14 @@ DEFAULT_JOB_TIMEOUT_SEC = "300"
 # GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are only needed for commit-status
 # feedback and signature verification respectively; the webhook works with just
 # the secret. Without any of them, Phase 6 is simply inactive.
+
+# --- Bitbucket (optional) -----------------------------------------------------
+# Auto-deploy on push via a Bitbucket repository webhook delivered to
+# /webhooks/bitbucket. Set as secrets, not vars:
+#   wrangler secret put BITBUCKET_WEBHOOK_SECRET   # the webhook's shared secret
+#   wrangler secret put BITBUCKET_ACCESS_TOKEN     # optional: post build-status feedback
+# In Bitbucket: Repository settings → Webhooks → Add webhook, URL
+#   https://<your-worker>/webhooks/bitbucket, trigger "Repository push", and set
+#   the same secret. Without the secret, deliveries are rejected. The access token
+#   is only needed for commit build-status feedback.
+# BITBUCKET_API_BASE = "https://api.bitbucket.org/2.0"   # override for Server/DC

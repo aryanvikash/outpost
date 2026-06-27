@@ -21,11 +21,28 @@ export interface Env {
   GITHUB_APP_ID?: string;
   /** App private key in PKCS#8 PEM (BEGIN PRIVATE KEY). */
   GITHUB_APP_PRIVATE_KEY?: string;
+
+  // --- Bitbucket (optional) -------------------------------------------------
+  /** Webhook secret used to verify the X-Hub-Signature on deliveries. */
+  BITBUCKET_WEBHOOK_SECRET?: string;
+  /**
+   * Access token (repository/workspace access token or app-password-derived
+   * token) used to post commit build-status feedback. Optional — without it the
+   * webhook still enqueues deploys, it just can't report status back.
+   */
+  BITBUCKET_ACCESS_TOKEN?: string;
+  /** Bitbucket API base; default https://api.bitbucket.org/2.0 (Cloud). */
+  BITBUCKET_API_BASE?: string;
 }
 
 /** True when commit-status feedback can be posted (App credentials present). */
 export function githubAppConfigured(env: Env): boolean {
   return Boolean(env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY);
+}
+
+/** True when Bitbucket build-status feedback can be posted. */
+export function bitbucketStatusConfigured(env: Env): boolean {
+  return Boolean(env.BITBUCKET_ACCESS_TOKEN);
 }
 
 export function heartbeatSec(env: Env): number {

@@ -23,6 +23,7 @@ import {
 import { isKnownAction } from "./actions";
 import { enqueueJob, machineStub } from "./enqueue";
 import { webhooks } from "./webhooks";
+import { webhooksBitbucket } from "./webhooks-bitbucket";
 import {
   jwtMachineId,
   verifyConnectJwt,
@@ -479,8 +480,10 @@ admin.post("/jobs/:id/cancel", async (c) => {
 
 app.route("/api", admin);
 
-// GitHub App webhook deliveries (self-authenticating via HMAC signature).
+// Webhook deliveries (self-authenticating via HMAC signature). Both providers
+// mount under /webhooks: GitHub at /webhooks/github, Bitbucket at /webhooks/bitbucket.
 app.route("/webhooks", webhooks);
+app.route("/webhooks", webhooksBitbucket);
 
 app.get("/", (c) => c.text("Outpost control plane — see /api (admin) and /connect (agents)\n"));
 
