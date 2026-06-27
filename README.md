@@ -1,7 +1,20 @@
-# Outpost
+<p align="center">
+  <img src="assets/banner.svg" alt="Outpost — run deploys and commands on remote servers, outbound-only, no open ports, no SSH" width="100%">
+</p>
 
-**Securely run commands (initially: deployments) on remote Linux servers from a
-central control plane — without opening any inbound ports and without SSH.**
+<p align="center">
+  <a href="https://github.com/aryanvikash/outpost/actions/workflows/ci.yml"><img src="https://github.com/aryanvikash/outpost/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/aryanvikash/outpost/releases"><img src="https://img.shields.io/github/v/release/aryanvikash/outpost?sort=semver&color=7469F2&label=release" alt="Latest release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="./agent"><img src="https://img.shields.io/badge/agent-Go-00ADD8?logo=go&logoColor=white" alt="Go agent"></a>
+  <a href="./control-plane"><img src="https://img.shields.io/badge/control%E2%80%91plane-Cloudflare-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare control plane"></a>
+  <a href="./PROTOCOL.md"><img src="https://img.shields.io/badge/protocol-v1-6E56CF" alt="Wire protocol v1"></a>
+</p>
+
+<p align="center">
+  <b>Securely run commands (initially: deployments) on remote Linux servers from a
+  central control plane — without opening any inbound ports and without SSH.</b>
+</p>
 
 A thin **agent** (a single static Go binary) runs on each server and dials
 **outbound** over WebSocket Secure to a **control plane** running entirely on
