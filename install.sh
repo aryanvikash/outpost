@@ -31,6 +31,7 @@ CONF_DIR="/etc/outpost"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+warn() { printf '\033[1;33m!!! %s\033[0m\n' "$*" >&2; }
 
 need() { command -v "$1" >/dev/null 2>&1 || err "missing required command: $1"; }
 need uname
@@ -212,7 +213,17 @@ fi
 # writes the private key (0600) and config under /etc/outpost.
 if [ -n "$URL" ] && [ -n "$ENROLL_TOKEN" ]; then
   if [ -f "$CONF_DIR/agent.conf" ] && [ -f "$CONF_DIR/agent.key" ]; then
-    log "device already enrolled ($CONF_DIR/agent.key exists); skipping enroll (OUTPOST_FORCE_ENROLL=1 to re-enroll)"
+    # An enroll token was supplied but this box already has an identity. The user
+    # almost certainly meant to register a device — don't silently skip.
+    warn "============================================================"
+    warn "ENROLL TOKEN IGNORED — this device is already enrolled."
+    warn "Existing key: $CONF_DIR/agent.key"
+    warn "No NEW device was registered and your token was NOT used."
+    warn ""
+    warn "To register a fresh device, re-run with OUTPOST_FORCE_ENROLL=1:"
+    warn "  ... OUTPOST_FORCE_ENROLL=1 OUTPOST_ENROLL_TOKEN=$ENROLL_TOKEN sh"
+    warn "(this drops the old identity; revoke the old machine in the dashboard)"
+    warn "============================================================"
   else
     log "enrolling device"
     $SUDO env OUTPOST_URL="$URL" OUTPOST_ENROLL_TOKEN="$ENROLL_TOKEN" OUTPOST_NAME="$NAME" \
