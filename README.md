@@ -66,14 +66,19 @@ inbound ports closed — including 22.**
 ## Repository layout
 
 ```
-agent/            Go agent (single static binary)
-control-plane/    Cloudflare Worker + Durable Object + D1 (TypeScript, Hono)
-web/              Admin dashboard (React + Vite + TanStack, JWT login)
+agent/            Go agent (single static binary)         → agent/README.md
+control-plane/    Cloudflare Worker + Durable Object + D1  → control-plane/README.md
+web/              Admin dashboard (React + Vite + TanStack)→ web/README.md
 PROTOCOL.md       Versioned wire-protocol spec (source of truth)
 install.sh        curl|sh installer (OS/arch detect, checksum verify, systemd)
 .goreleaser.yaml  Cross-compile, checksums, cosign signing, deb/rpm, Docker
 packaging/        systemd unit, sudoers example, nfpm scripts, Dockerfile
 ```
+
+Each component has its own README for using it standalone:
+**[agent](./agent/README.md)** · **[control plane / API](./control-plane/README.md)** ·
+**[web dashboard](./web/README.md)**. The wire contract between agent and control
+plane is [`PROTOCOL.md`](./PROTOCOL.md).
 
 ## Quick start
 
