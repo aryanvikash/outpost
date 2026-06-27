@@ -256,9 +256,16 @@ export class MachineDO extends DurableObject<Env> {
         if (msg.deploy) {
           await this.db.setMachineDeploy(machineId, JSON.stringify(msg.deploy));
         }
-        if (msg.hooks) {
-          await this.db.setMachineHooks(machineId, JSON.stringify(msg.hooks));
-        }
+        // Set hooks + issues on every hello (even when empty) so stale entries
+        // clear once the operator fixes or removes a hook.
+        await this.db.setMachineHooks(
+          machineId,
+          JSON.stringify(msg.hooks ?? []),
+        );
+        await this.db.setMachineHookIssues(
+          machineId,
+          JSON.stringify(msg.hookIssues ?? []),
+        );
         break;
       }
       case "heartbeat": {

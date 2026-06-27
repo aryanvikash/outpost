@@ -12,6 +12,7 @@ export interface MachineRow {
   revoked_at: number | null;
   deploy_json: string | null;
   hooks_json: string | null;
+  hook_issues_json: string | null;
 }
 
 export interface EnrollTokenRow {
@@ -145,6 +146,13 @@ export class DB {
     await this.d1
       .prepare(`UPDATE machines SET hooks_json = ? WHERE id = ?`)
       .bind(hooksJson, id)
+      .run();
+  }
+
+  async setMachineHookIssues(id: string, hookIssuesJson: string): Promise<void> {
+    await this.d1
+      .prepare(`UPDATE machines SET hook_issues_json = ? WHERE id = ?`)
+      .bind(hookIssuesJson, id)
       .run();
   }
 

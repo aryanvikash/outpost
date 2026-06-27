@@ -13,9 +13,15 @@
 #   OUTPOST_URL          control-plane wss URL       (else prompted)
 #   OUTPOST_ENROLL_TOKEN one-time enroll token oet_… (else prompted)
 #   OUTPOST_NAME         optional machine name (defaults to hostname)
+#   OUTPOST_RUN_USER     user the agent runs as (default: the sudo-invoking user)
 #   OUTPOST_FORCE_ENROLL set to 1 to drop the existing identity and re-enroll
 #   OUTPOST_REPO         github owner/repo (default: aryanvikash/outpost)
 #   OUTPOST_NO_SERVICE   set to 1 to skip systemd enable/start
+#
+# The agent runs as a real login user (the one who ran the installer) so deploy
+# hooks can reach that user's app dirs, git, node, and pm2 with no extra setup.
+# Hooks live in ~/.config/outpost/hooks (create them with: outpost-agent hook
+# edit deploy) — no sudo, no chmod.
 set -eu
 
 REPO="${OUTPOST_REPO:-aryanvikash/outpost}"
@@ -45,6 +51,7 @@ if [ "${1:-}" = "uninstall" ]; then
   log "removing outpost-agent"
   $SUDO systemctl disable --now outpost-agent 2>/dev/null || true
   $SUDO rm -f /lib/systemd/system/outpost-agent.service /etc/systemd/system/outpost-agent.service
+  $SUDO rm -rf /etc/systemd/system/outpost-agent.service.d
   $SUDO systemctl daemon-reload 2>/dev/null || true
   $SUDO rm -f "$INSTALL_DIR/$BINARY"
   $SUDO rm -rf "$CONF_DIR"
@@ -129,10 +136,20 @@ NAME="${OUTPOST_NAME:-}"
 if [ -z "$URL" ] && [ -t 0 ]; then printf "Control-plane URL (wss://...): "; read -r URL; fi
 if [ -z "$ENROLL_TOKEN" ] && [ -t 0 ]; then printf "Enroll token (oet_...): "; read -r ENROLL_TOKEN; fi
 
-# Service user.
-if ! getent passwd outpost >/dev/null 2>&1; then
-  $SUDO useradd --system --no-create-home --shell /usr/sbin/nologin outpost 2>/dev/null || true
+# Run user: the agent runs as a REAL login user so deploy hooks can reach that
+# user's app dirs, git, node, and pm2 with no extra setup. Default to whoever
+# invoked the installer via sudo; fall back to a prompt, then root.
+RUN_USER="${OUTPOST_RUN_USER:-${SUDO_USER:-}}"
+if [ -z "$RUN_USER" ] || [ "$RUN_USER" = "root" ]; then
+  if [ -t 0 ]; then printf "Run the agent as which user? [root]: "; read -r RUN_USER; fi
+  RUN_USER="${RUN_USER:-root}"
 fi
+getent passwd "$RUN_USER" >/dev/null 2>&1 || err "user '$RUN_USER' does not exist (set OUTPOST_RUN_USER)"
+RUN_GROUP="$(id -gn "$RUN_USER")"
+RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
+[ -n "$RUN_HOME" ] || err "could not determine home for '$RUN_USER'"
+log "agent will run as: $RUN_USER ($RUN_HOME)"
+
 $SUDO mkdir -p "$CONF_DIR"
 
 # Systemd unit (downloaded from the tagged source).
@@ -140,6 +157,49 @@ unit="$tmp/outpost-agent.service"
 download "https://raw.githubusercontent.com/$REPO/$VERSION/packaging/systemd/outpost-agent.service" "$unit" \
   || err "could not fetch systemd unit"
 $SUDO install -m 0644 "$unit" /lib/systemd/system/outpost-agent.service
+
+# Drop-in override: run as the chosen user, let deploy hooks reach the home, and
+# keep hooks in ~/.config/outpost/hooks (Environment= unsets the /etc pin so the
+# agent resolves the run user's config dir). No post-install chmod/chown needed.
+ov_dir="/etc/systemd/system/outpost-agent.service.d"
+ov="$tmp/override.conf"
+cat > "$ov" <<OVERRIDE
+[Service]
+User=$RUN_USER
+Group=$RUN_GROUP
+ProtectHome=false
+ReadWritePaths=$RUN_HOME
+Environment=OUTPOST_HOOKS_DIR=
+OVERRIDE
+$SUDO mkdir -p "$ov_dir"
+$SUDO install -m 0644 "$ov" "$ov_dir/override.conf"
+
+# Hooks dir in the run user's home, owned by them (no sudo to add hooks later),
+# pre-seeded with an editable deploy template.
+HOOKS_DIR="$RUN_HOME/.config/outpost/hooks"
+$SUDO install -d -o "$RUN_USER" -g "$RUN_GROUP" -m 0755 \
+  "$RUN_HOME/.config" "$RUN_HOME/.config/outpost" "$HOOKS_DIR"
+if [ ! -e "$HOOKS_DIR/deploy" ] && [ ! -e "$HOOKS_DIR/deploy.example" ]; then
+  tmpl="$tmp/deploy.example"
+  cat > "$tmpl" <<'HOOK'
+#!/bin/sh
+# Outpost deploy hook — rename to `deploy` (or run: outpost-agent hook edit deploy).
+# Edit the two values, then save. No chmod needed.
+set -eu
+
+APP_DIR="$HOME/myapp"     # <-- your app directory
+PM2_APP="myapp"           # <-- your pm2 process name
+
+cd "$APP_DIR"
+echo "==> deploy $PM2_APP (branch=${OUTPOST_BRANCH:-current})"
+git pull --ff-only
+npm ci
+npm run build
+pm2 restart "$PM2_APP" --update-env
+echo "==> done"
+HOOK
+  $SUDO install -o "$RUN_USER" -g "$RUN_GROUP" -m 0644 "$tmpl" "$HOOKS_DIR/deploy.example"
+fi
 
 # Re-enroll: OUTPOST_FORCE_ENROLL=1 drops the existing identity so a fresh enroll
 # token registers a NEW machine (use after revoking the old one).
@@ -159,7 +219,8 @@ if [ -n "$URL" ] && [ -n "$ENROLL_TOKEN" ]; then
       "$INSTALL_DIR/$BINARY" add --url "$URL" --token "$ENROLL_TOKEN" --name "$NAME" \
       --config "$CONF_DIR/agent.conf" --key "$CONF_DIR/agent.key" \
       || err "enrollment failed"
-    $SUDO chown -R outpost:outpost "$CONF_DIR"
+    # The run user must own its key/config to read them.
+    $SUDO chown -R "$RUN_USER:$RUN_GROUP" "$CONF_DIR"
     $SUDO chmod 0600 "$CONF_DIR/agent.key" "$CONF_DIR/agent.conf"
   fi
 else

@@ -13,6 +13,7 @@ import {
   Pencil,
   Loader2,
   RadioTower,
+  AlertTriangle,
 } from "lucide-react";
 import {
   listMachines,
@@ -325,6 +326,22 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
               {machine.deploy.appDir}
               {machine.deploy.mode !== "hook" && ` · pm2 ${machine.deploy.pm2Target}`}
             </span>
+          </div>
+        )}
+        {machine && machine.hookIssues.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs">
+            <p className="mb-1.5 flex items-center gap-1.5 font-medium text-amber-400">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {machine.hookIssues.length} hook
+              {machine.hookIssues.length > 1 ? "s" : ""} found but not runnable
+            </p>
+            <ul className="space-y-0.5 text-amber-200/80">
+              {machine.hookIssues.map((h) => (
+                <li key={h.name}>
+                  <code className="font-mono text-amber-300">{h.name}</code> — {h.reason}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">

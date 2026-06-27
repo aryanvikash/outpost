@@ -6,6 +6,8 @@
 //
 //	outpost-agent add --url wss://host/connect --token oet_...   # first-time enroll
 //	outpost-agent [--config /etc/outpost/agent.conf]             # run (default)
+//	outpost-agent hook edit <name>                               # create/edit a hook
+//	outpost-agent update [--version vX.Y.Z]                      # self-update + restart
 //	outpost-agent uninstall [--yes] [--remove-user]              # stop + remove
 //	outpost-agent --version
 package main
@@ -47,6 +49,18 @@ func main() {
 		case "uninstall":
 			if err := runUninstall(os.Args[2:]); err != nil {
 				fmt.Fprintf(os.Stderr, "uninstall failed: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "hook":
+			if err := runHookCmd(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "hook: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "update", "upgrade":
+			if err := runUpdate(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "update failed: %v\n", err)
 				os.Exit(1)
 			}
 			return
@@ -108,6 +122,9 @@ func runUninstall(args []string) error {
 			step("remove "+u, func() error { return os.Remove(u) })
 		}
 	}
+	if d := "/etc/systemd/system/outpost-agent.service.d"; exists(d) {
+		step("remove "+d, func() error { return os.RemoveAll(d) })
+	}
 	if hasCmd("systemctl") {
 		_ = exec.Command("systemctl", "daemon-reload").Run()
 	}
@@ -138,6 +155,87 @@ func runUninstall(args []string) error {
 		fmt.Println("IMPORTANT: revoke this device in the control plane (dashboard → Revoke).")
 	}
 	return nil
+}
+
+// runHookCmd implements `outpost-agent hook …`: a no-sudo way to create and list
+// host hooks in the dir the running agent reads. Run it as the same user the
+// service runs as so the path resolves identically.
+//
+//	outpost-agent hook ls                 # list runnable hooks + problems
+//	outpost-agent hook edit <name>        # create (with a template) + $EDITOR
+//	outpost-agent hook path               # print the hooks dir
+func runHookCmd(args []string) error {
+	sub := "ls"
+	if len(args) > 0 {
+		sub = args[0]
+	}
+	switch sub {
+	case "path":
+		fmt.Println(actions.HooksDir())
+		return nil
+	case "ls", "list":
+		dir := actions.HooksDir()
+		fmt.Printf("hooks dir: %s\n", dir)
+		hooks := actions.ListHooks()
+		if len(hooks) == 0 {
+			fmt.Println("  (no runnable hooks — create one: outpost-agent hook edit deploy)")
+		}
+		for _, h := range hooks {
+			fmt.Printf("  ✓ %s\n", h)
+		}
+		for _, is := range actions.ListHookIssues() {
+			fmt.Printf("  ✗ %s — %s\n", is.Name, is.Reason)
+		}
+		return nil
+	case "edit", "add", "new":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: outpost-agent hook edit <name>")
+		}
+		return editHook(args[1])
+	default:
+		return fmt.Errorf("unknown subcommand %q (use: ls | edit <name> | path)", sub)
+	}
+}
+
+func editHook(name string) error {
+	if !actions.ValidHookName(name) {
+		return fmt.Errorf("invalid hook name %q: use lowercase letters, digits, '-', '_' (no dots)", name)
+	}
+	dir := actions.HooksDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, name)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, []byte(actions.HookTemplate(name)), 0o755); err != nil {
+			return err
+		}
+		fmt.Printf("created %s\n", path)
+	}
+	editor := firstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR"))
+	if editor == "" {
+		if _, err := exec.LookPath("nano"); err == nil {
+			editor = "nano"
+		} else {
+			editor = "vi"
+		}
+	}
+	cmd := exec.Command(editor, path)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	fmt.Printf("saved %s — it will show up after the agent's next connect\n", path)
+	return nil
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // runAdd implements `outpost-agent add`: generate a device keypair, register the
