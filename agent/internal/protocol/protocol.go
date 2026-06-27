@@ -61,6 +61,16 @@ type Hello struct {
 	Actions      []string      `json:"actions"`
 	Deploy       *DeployConfig `json:"deploy,omitempty"`
 	Hooks        []string      `json:"hooks,omitempty"`
+	// HookIssues lists files in the hooks dir that look like intended hooks but
+	// are NOT runnable, with the reason — so the UI can surface the problem
+	// instead of silently ignoring them.
+	HookIssues []HookIssue `json:"hookIssues,omitempty"`
+}
+
+// HookIssue describes a hook file that exists but can't be run, and why.
+type HookIssue struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
 }
 
 // HostStats is best-effort host telemetry sent with heartbeats.

@@ -247,6 +247,7 @@ func (c *Client) sendHello(ctx context.Context) error {
 		Actions:      actions.Names(),
 		Deploy:       &deploy,
 		Hooks:        actions.ListHooks(),
+		HookIssues:   actions.ListHookIssues(),
 	}
 	return c.send(ctx, hello)
 }

@@ -29,6 +29,12 @@ export interface HelloMessage {
   actions: string[];
   deploy?: DeployConfig;
   hooks?: string[];
+  hookIssues?: HookIssue[];
+}
+
+export interface HookIssue {
+  name: string;
+  reason: string;
 }
 
 export interface HostStats {

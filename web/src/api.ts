@@ -52,6 +52,11 @@ export interface DeployTarget {
   hookPath?: string;
 }
 
+export interface HookIssue {
+  name: string;
+  reason: string;
+}
+
 export interface Machine {
   id: string;
   name: string;
@@ -62,6 +67,7 @@ export interface Machine {
   revoked: boolean;
   deploy: DeployTarget | null;
   hooks: string[];
+  hookIssues: HookIssue[];
 }
 
 export interface Job {

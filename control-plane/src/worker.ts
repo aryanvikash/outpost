@@ -268,6 +268,7 @@ admin.get("/machines", async (c) => {
       revoked: m.revoked_at !== null,
       deploy: m.deploy_json ? JSON.parse(m.deploy_json) : null,
       hooks: m.hooks_json ? JSON.parse(m.hooks_json) : [],
+      hookIssues: m.hook_issues_json ? JSON.parse(m.hook_issues_json) : [],
     })),
   });
 });
