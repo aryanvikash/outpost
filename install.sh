@@ -160,8 +160,10 @@ download "https://raw.githubusercontent.com/$REPO/$VERSION/packaging/systemd/out
 $SUDO install -m 0644 "$unit" /lib/systemd/system/outpost-agent.service
 
 # Drop-in override: run as the chosen user, let deploy hooks reach the home, and
-# keep hooks in ~/.config/outpost/hooks (Environment= unsets the /etc pin so the
-# agent resolves the run user's config dir). No post-install chmod/chown needed.
+# pin the hooks dir to an ABSOLUTE path under the run user's home (don't rely on
+# systemd exporting $HOME — it may not, which would silently fall back to /etc).
+# No post-install chmod/chown needed.
+HOOKS_DIR="$RUN_HOME/.config/outpost/hooks"
 ov_dir="/etc/systemd/system/outpost-agent.service.d"
 ov="$tmp/override.conf"
 cat > "$ov" <<OVERRIDE
@@ -170,14 +172,13 @@ User=$RUN_USER
 Group=$RUN_GROUP
 ProtectHome=false
 ReadWritePaths=$RUN_HOME
-Environment=OUTPOST_HOOKS_DIR=
+Environment=OUTPOST_HOOKS_DIR=$HOOKS_DIR
 OVERRIDE
 $SUDO mkdir -p "$ov_dir"
 $SUDO install -m 0644 "$ov" "$ov_dir/override.conf"
 
 # Hooks dir in the run user's home, owned by them (no sudo to add hooks later),
-# pre-seeded with an editable deploy template.
-HOOKS_DIR="$RUN_HOME/.config/outpost/hooks"
+# pre-seeded with an editable deploy template. (HOOKS_DIR set above.)
 $SUDO install -d -o "$RUN_USER" -g "$RUN_GROUP" -m 0755 \
   "$RUN_HOME/.config" "$RUN_HOME/.config/outpost" "$HOOKS_DIR"
 if [ ! -e "$HOOKS_DIR/deploy" ] && [ ! -e "$HOOKS_DIR/deploy.example" ]; then
