@@ -166,8 +166,11 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
   $SUDO systemctl daemon-reload
   if [ -f "$CONF_DIR/agent.conf" ]; then
-    $SUDO systemctl enable --now outpost-agent
-    log "outpost-agent enabled and started"
+    # `restart` also starts it if stopped, and (unlike enable --now) ensures a
+    # re-install picks up the new binary even if the old one was running.
+    $SUDO systemctl enable outpost-agent
+    $SUDO systemctl restart outpost-agent
+    log "outpost-agent enabled and (re)started"
     log "check status: systemctl status outpost-agent"
   else
     log "enroll first, then: sudo systemctl enable --now outpost-agent"
