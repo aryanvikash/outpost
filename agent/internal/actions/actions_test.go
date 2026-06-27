@@ -9,8 +9,8 @@ import (
 	"github.com/aryanvikash/outpost/agent/internal/protocol"
 )
 
-// collect runs an action and returns its exit code, error, and combined output.
-func collect(t *testing.T, name string, params string) (int, error, string) {
+// collect runs an action and returns its exit code, combined output, and error.
+func collect(t *testing.T, name string, params string) (int, string, error) {
 	t.Helper()
 	a, ok := Lookup(name)
 	if !ok {
@@ -19,7 +19,7 @@ func collect(t *testing.T, name string, params string) (int, error, string) {
 	var sb strings.Builder
 	emit := func(stream, chunk string) { sb.WriteString(chunk) }
 	code, err := a.Handle(context.Background(), json.RawMessage(params), emit)
-	return code, err, sb.String()
+	return code, sb.String(), err
 }
 
 func TestAllowlistRejectsUnknownAction(t *testing.T) {
@@ -50,7 +50,7 @@ func TestNamesIsTheClosedSet(t *testing.T) {
 }
 
 func TestHealthcheckSucceeds(t *testing.T) {
-	code, err, out := collect(t, "healthcheck", "{}")
+	code, out, err := collect(t, "healthcheck", "{}")
 	if err != nil || code != 0 {
 		t.Fatalf("healthcheck failed: code=%d err=%v", code, err)
 	}
@@ -69,7 +69,7 @@ func TestDeployRejectsInjectionInBranch(t *testing.T) {
 		`{"branch":"`+strings.Repeat("a", 300)+`"}`,
 	}
 	for _, c := range cases {
-		code, err, _ := collect(t, "deploy", c)
+		code, _, err := collect(t, "deploy", c)
 		var refused ErrRefused
 		if err == nil || !asRefused(err, &refused) {
 			t.Errorf("expected refusal for params %s (got code=%d err=%v)", c, code, err)
@@ -78,7 +78,7 @@ func TestDeployRejectsInjectionInBranch(t *testing.T) {
 }
 
 func TestRestartRejectsInvalidApp(t *testing.T) {
-	code, err, _ := collect(t, "restart", `{"app":"my app; reboot"}`)
+	code, _, err := collect(t, "restart", `{"app":"my app; reboot"}`)
 	if err == nil {
 		t.Fatalf("expected refusal, got code=%d", code)
 	}
@@ -91,7 +91,7 @@ func TestRestartRejectsInvalidApp(t *testing.T) {
 func TestRunHookRejectsBadNamesAndMissing(t *testing.T) {
 	// Invalid names (traversal / bad chars) must be refused before any fs access.
 	for _, p := range []string{`{"name":"../../etc/passwd"}`, `{"name":"a b"}`, `{"name":""}`, `{}`} {
-		_, err, _ := collect(t, "run-hook", p)
+		_, _, err := collect(t, "run-hook", p)
 		var refused ErrRefused
 		if err == nil || !asRefused(err, &refused) {
 			t.Errorf("expected refusal for run-hook params %s, got err=%v", p, err)
@@ -99,7 +99,7 @@ func TestRunHookRejectsBadNamesAndMissing(t *testing.T) {
 	}
 	// Valid name but no such hook on this box → refused.
 	t.Setenv("OUTPOST_HOOKS_DIR", t.TempDir())
-	_, err, _ := collect(t, "run-hook", `{"name":"pull"}`)
+	_, _, err := collect(t, "run-hook", `{"name":"pull"}`)
 	if err == nil {
 		t.Error("expected refusal when hook file does not exist")
 	}
