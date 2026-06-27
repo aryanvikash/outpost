@@ -272,6 +272,21 @@ admin.get("/machines", async (c) => {
   });
 });
 
+admin.post("/machines/:id/rename", async (c) => {
+  const id = c.req.param("id");
+  const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+  const name = (body.name ?? "").trim();
+  if (!name) return c.json({ error: "name required" }, 400);
+  if (name.length > 64) return c.json({ error: "name too long (max 64)" }, 400);
+
+  const db = new DB(c.env.DB);
+  const m = await db.getMachine(id);
+  if (!m) return c.json({ error: "not found" }, 404);
+  await db.renameMachine(id, name);
+  await db.audit({ ts: Date.now(), actor: adminActor(c), action: "rename", target: id, detail: { name } });
+  return c.json({ id, name });
+});
+
 admin.post("/machines/:id/revoke", async (c) => {
   const id = c.req.param("id");
   const db = new DB(c.env.DB);

@@ -155,6 +155,13 @@ export class DB {
       .run();
   }
 
+  async renameMachine(id: string, name: string): Promise<void> {
+    await this.d1
+      .prepare(`UPDATE machines SET name = ? WHERE id = ?`)
+      .bind(name, id)
+      .run();
+  }
+
   async revokeMachine(id: string, ts: number): Promise<void> {
     await this.d1
       .prepare(`UPDATE machines SET revoked_at = ? WHERE id = ?`)
