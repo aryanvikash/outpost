@@ -231,12 +231,16 @@ if [ -n "$URL" ] && [ -n "$ENROLL_TOKEN" ]; then
       "$INSTALL_DIR/$BINARY" add --url "$URL" --token "$ENROLL_TOKEN" --name "$NAME" \
       --config "$CONF_DIR/agent.conf" --key "$CONF_DIR/agent.key" \
       || err "enrollment failed"
-    # The run user must own its key/config to read them.
-    $SUDO chown -R "$RUN_USER:$RUN_GROUP" "$CONF_DIR"
-    $SUDO chmod 0600 "$CONF_DIR/agent.key" "$CONF_DIR/agent.conf"
   fi
 else
   log "no URL/enroll token supplied; run 'outpost-agent add --url ... --token oet_...' to enroll"
+fi
+
+# Always ensure the run user owns the config dir — whether we just enrolled or
+# this was a reinstall that skipped enrollment (existing identity kept).
+if [ -f "$CONF_DIR/agent.conf" ] || [ -f "$CONF_DIR/agent.key" ]; then
+  $SUDO chown -R "$RUN_USER:$RUN_GROUP" "$CONF_DIR"
+  $SUDO chmod 0600 "$CONF_DIR/agent.key" "$CONF_DIR/agent.conf" 2>/dev/null || true
 fi
 
 if [ "${OUTPOST_NO_SERVICE:-0}" = "1" ]; then
