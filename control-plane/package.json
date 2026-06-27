@@ -1,0 +1,29 @@
+{
+  "name": "outpost-control-plane",
+  "version": "0.1.0",
+  "description": "Outpost control plane — Cloudflare Worker + Durable Objects + D1",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "sh deploy.sh dev",
+    "setup": "sh deploy.sh setup",
+    "deploy": "sh deploy.sh",
+    "deploy:raw": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "migrate:local": "wrangler d1 migrations apply outpost --local",
+    "migrate:remote": "wrangler d1 migrations apply outpost --remote"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.5.40",
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "wrangler": "^3.99.0"
+  }
+}

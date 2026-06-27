@@ -1,0 +1,59 @@
+# Outpost control plane — Cloudflare Worker + Durable Objects + D1
+#
+# Before first deploy:
+#   1. wrangler d1 create outpost      → paste the returned database_id below
+#   2. set secrets:  wrangler secret put ADMIN_TOKEN
+#   3. wrangler d1 migrations apply outpost --remote
+#   4. wrangler deploy
+name = "outpost"
+main = "src/worker.ts"
+compatibility_date = "2024-12-05"
+compatibility_flags = ["nodejs_compat"]
+
+# --- Durable Objects: one MachineDO instance per managed machine ---------------
+[[durable_objects.bindings]]
+name = "MACHINE_DO"
+class_name = "MachineDO"
+
+# SQLite-backed Durable Objects require a migration declaring the class.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MachineDO"]
+
+# --- D1: fleet-wide registry, job history, audit log --------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "outpost"
+database_id = "d18436d2-f1d5-4bd1-9d8a-b14d964820ff"
+migrations_dir = "migrations"
+
+# --- Vars ---------------------------------------------------------------------
+# Non-secret config. Secrets (ADMIN_TOKEN) are set via `wrangler secret put`.
+[vars]
+HEARTBEAT_SEC = "30"
+DEFAULT_JOB_TIMEOUT_SEC = "300"
+
+# For local dev you can set a throwaway admin token here; in production use
+# `wrangler secret put ADMIN_TOKEN` instead and remove it from [vars].
+# ADMIN_TOKEN = "dev-admin-token"
+
+# --- Admin web UI (optional) --------------------------------------------------
+# The dashboard logs in with a password and gets a short-lived JWT. Both of these
+# fall back to ADMIN_TOKEN if unset, so the UI works out of the box:
+#   wrangler secret put ADMIN_PASSWORD     # login password (default: ADMIN_TOKEN)
+#   wrangler secret put ADMIN_JWT_SECRET   # JWT signing key (default: ADMIN_TOKEN)
+# Lock CORS to the UI's origin once it has a fixed URL (default "*"):
+# ADMIN_UI_ORIGIN = "https://admin.example.com"
+
+# --- GitHub App (Phase 6, optional) -------------------------------------------
+# Auto-deploy on push via a GitHub App. Set these as secrets, not vars:
+#   wrangler secret put GITHUB_WEBHOOK_SECRET    # the App's webhook secret
+#   wrangler secret put GITHUB_APP_PRIVATE_KEY   # PKCS#8 PEM (BEGIN PRIVATE KEY)
+# GITHUB_APP_ID is non-secret and may live here:
+# GITHUB_APP_ID = "123456"
+#
+# Convert GitHub's PKCS#1 key to PKCS#8 once:
+#   openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in app.pem -out app.pkcs8.pem
+# GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET are only needed for commit-status
+# feedback and signature verification respectively; the webhook works with just
+# the secret. Without any of them, Phase 6 is simply inactive.

@@ -1,0 +1,41 @@
+#!/bin/sh
+# Example Outpost deploy hook (custom command).
+#
+# Install as /etc/outpost/hooks/deploy, owned by root, NOT writable by the
+# outpost agent user, and executable:
+#
+#   sudo install -D -o root -g root -m 0755 deploy.example /etc/outpost/hooks/deploy
+#
+# The agent runs this when a `deploy` job arrives, instead of the built-in PM2
+# flow. It receives validated params as environment variables:
+#   OUTPOST_BRANCH      the branch from the job (validated)
+#   OUTPOST_APP_DIR     OUTPOST_GIT_REMOTE     OUTPOST_PM2_TARGET   (agent config)
+#
+# stdout/stderr stream back as the job logs. Exit non-zero to fail the job.
+#
+# This file is host-owned: the control plane can only trigger it, never change it.
+set -eu
+
+APP_DIR="${OUTPOST_APP_DIR:-/srv/app}"
+BRANCH="${OUTPOST_BRANCH:-main}"
+REMOTE="${OUTPOST_GIT_REMOTE:-origin}"
+
+echo "deploying $BRANCH to $APP_DIR"
+
+git -C "$APP_DIR" fetch --prune "$REMOTE"
+git -C "$APP_DIR" checkout "$BRANCH"
+git -C "$APP_DIR" pull --ff-only "$REMOTE" "$BRANCH"
+
+# --- examples for different stacks (uncomment what you use) -------------------
+# Python + supervisor:
+#   "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+#   sudo supervisorctl restart myapp
+#
+# Node + PM2:
+#   npm --prefix "$APP_DIR" ci --omit=dev
+#   pm2 reload "${OUTPOST_PM2_TARGET:-ecosystem.config.js}"
+#
+# Docker compose:
+#   docker compose -f "$APP_DIR/compose.yaml" up -d --build
+
+echo "done"

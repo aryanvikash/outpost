@@ -1,0 +1,301 @@
+# Build Prompt: "Outpost" — an open-source remote command/deploy agent on Cloudflare
+
+> **Working codename:** Outpost (rename freely). It's an agent you install on a
+> remote machine — like an outpost reporting back to HQ.
+
+You are building a complete, open-source system for securely running commands
+(initially: deployments) on remote Linux servers from a central control plane,
+**without opening any inbound ports on those servers and without SSH**. Build it
+as a monorepo. Work through the phases in order; each phase must be runnable and
+testable before moving to the next.
+
+---
+
+## 1. What we're building (the one-paragraph version)
+
+A thin **agent** (Go, single static binary) is installed on each target server.
+It dials **outbound** over WebSocket Secure to a **control plane** running entirely
+on Cloudflare (a Worker + Durable Objects + D1). The control plane pushes **jobs**
+down the connection; the agent executes them from a **fixed allowlist of named
+actions** (never arbitrary shell), streams logs back over the same connection, and
+reports an exit status. Because the agent only ever connects *out*, the target
+server can have **all inbound ports closed**, including 22. The first real action
+is "deploy" for a PM2-managed Node app (`git pull` + `pm2 reload`).
+
+---
+
+## 2. Goals and non-goals
+
+**Goals**
+- No inbound ports on managed servers; agent is outbound-only.
+- No runtime dependency on the managed server beyond the single Go binary.
+- Strongly consistent, per-machine job state and live connection handling.
+- Minimal, auditable codebase (this tool executes commands — trust is the product).
+- Cheap to run (target: Cloudflare free tier for a small fleet).
+- Clean open-source distribution: one-line install on a fresh box.
+
+**Non-goals (do not build these now)**
+- No arbitrary remote shell. Actions are a vetted, named allowlist only.
+- No replacement for full config management (Ansible/Salt). This is a focused
+  command/deploy dispatcher.
+- No multi-cloud abstraction. Target is generic Linux + systemd.
+- No billing/multi-tenant SaaS layer yet (design so it could be added later).
+
+---
+
+## 3. Architecture
+
+```
+ Agent (Go, on each server)          Cloudflare                         Storage
+ ---------------------------         -----------------------------      -----------------
+ wss outbound  ───────────────►  Worker (front door)
+   • holds 1 live socket            • terminates wss, validates token
+   • executes allowlisted actions   • routes to that machine's DO
+   • streams logs up                        │
+   • heartbeat + reconnect                  ▼
+                                   Durable Object  (ONE per machine)
+                                     • IS the WebSocket server for its agent
+                                     • uses WebSocket Hibernation API
+                                     • per-machine job queue + state (SQLite)
+                                     • pushes jobs, collects logs/results
+                                            │
+                                            ▼
+                                   D1 (fleet-wide)
+                                     • machine registry + tokens (hashed)
+                                     • job history + audit log
+                                     • data source for admin API/UI
+```
+
+**Connection direction is the core security property.** The agent is the client;
+the Durable Object is the WebSocket **server**. This is mandatory — WebSocket
+Hibernation only works when the DO is the server, and it's also what lets the
+managed box keep every inbound port closed.
+
+---
+
+## 4. Tech stack (locked — do not relitigate)
+
+- **Agent:** Go. Single static binary, cross-compiled for `linux/amd64` and
+  `linux/arm64` (Graviton) at minimum. WebSocket library: **`github.com/coder/websocket`**
+  (modern, not the archived gorilla one). Standard library for everything else where
+  possible — keep the dependency tree tiny for auditability.
+- **Control plane:** Cloudflare Workers + Durable Objects + D1, all in **TypeScript**.
+  Use **`wrangler`** for config/deploy and **Miniflare/`wrangler dev`** for local dev.
+- **Durable Objects:** SQLite-backed. WebSocket Hibernation API — use
+  `state.acceptWebSocket(ws)`, **not** `ws.accept()`. Address one DO per machine by
+  machine ID via `getByName`.
+- **Wire protocol:** JSON over WebSocket, versioned, documented in `PROTOCOL.md` as a
+  language-neutral public contract (so anyone can write an agent in any language).
+- **License:** Apache-2.0 (explicit patent grant; standard for infra tooling).
+- **Release/distribution:** **GoReleaser** → GitHub Releases, plus a `curl | sh`
+  install script.
+
+---
+
+## 5. Repository layout
+
+```
+outpost/
+  agent/                 # Go agent
+    cmd/outpost-agent/    # main package
+    internal/
+      client/             # wss connect + reconnect/backoff loop
+      actions/            # allowlisted action handlers (deploy, healthcheck, ...)
+      protocol/           # Go structs mirroring PROTOCOL.md
+      config/             # token + control-plane URL loading
+    go.mod
+  control-plane/         # Cloudflare TypeScript
+    src/
+      worker.ts           # front door: auth + routing
+      machine-do.ts       # Durable Object (one per machine)
+      admin/              # admin API handlers (enqueue, list, logs)
+      protocol.ts         # TS types mirroring PROTOCOL.md
+      db/                 # D1 schema + queries
+    wrangler.toml
+    migrations/           # D1 SQL migrations
+  PROTOCOL.md            # the versioned wire-protocol spec (source of truth)
+  install.sh             # curl|sh installer (OS/arch detect + systemd)
+  .goreleaser.yaml       # cross-compile, checksums, signing, packages
+  packaging/
+    systemd/outpost-agent.service
+  README.md
+  LICENSE                # Apache-2.0
+```
+
+---
+
+## 6. Component specifications
+
+### 6.1 Wire protocol (`PROTOCOL.md`) — write this FIRST
+
+Define every message both directions. JSON, each message has `type` and a protocol
+`version`. At minimum:
+
+- **Agent → control plane**
+  - `hello` — `{ machineId, agentVersion, token }` (token only on connect handshake;
+    or send token in the `Authorization` header on the upgrade request — prefer the
+    header so it's not in the message body).
+  - `heartbeat` — periodic liveness ping with light host stats.
+  - `log` — `{ jobId, stream: "stdout"|"stderr", chunk, seq }` streamed during a job.
+  - `result` — `{ jobId, exitCode, finishedAt }`.
+- **Control plane → agent**
+  - `job` — `{ jobId, action, params, timeoutSec }`. `action` is a name from the
+    allowlist; `params` is a constrained, validated object. **Never** a raw command.
+  - `ack` / `cancel` as needed.
+
+Document: versioning rules, what happens on unknown `action`, max message size,
+heartbeat interval, and that the contract is stable/versioned (other people will
+build against it).
+
+### 6.2 Control plane — Worker (`worker.ts`)
+
+- Handle the WebSocket upgrade at e.g. `GET /connect`.
+- **Authenticate before routing:** read the agent token (Authorization header),
+  look it up (hashed) in D1, resolve to a `machineId`. Reject otherwise.
+- Route the socket to that machine's Durable Object (`getByName(machineId)`), which
+  accepts it as a hibernatable WebSocket server.
+- Serve the **admin API** (separate auth — admin tokens, not agent tokens):
+  - `POST /api/machines` — enroll a machine, return a one-time agent token.
+  - `GET /api/machines` — list machines + online status.
+  - `POST /api/machines/:id/jobs` — enqueue a job `{ action, params }`.
+  - `GET /api/jobs/:id` — status + result.
+  - `GET /api/jobs/:id/logs` — fetch streamed logs (and/or a wss endpoint to stream
+    them live to a browser).
+
+### 6.3 Control plane — Durable Object (`machine-do.ts`), one per machine
+
+- Owns the live WebSocket to its agent using the **Hibernation API**
+  (`state.acceptWebSocket`). Persist any per-connection state with
+  `serializeAttachment`/`deserializeAttachment`.
+- Keeps a per-machine **job queue** and current job state in its SQLite storage.
+- On `job` enqueue (called from the Worker/admin): if the agent is connected, push the
+  `job` message; else queue it and deliver on next connect.
+- On incoming `log`/`result` messages: append logs, update job state, and write
+  durable records to **D1** for fleet-wide history/audit.
+- Track online/offline via heartbeat + the WebSocket close handler.
+- Define job redelivery semantics: a job that was dispatched but never got a `result`
+  before disconnect should be marked `interrupted` and **not** silently re-run unless
+  the action is explicitly marked idempotent.
+
+### 6.4 D1 schema (`migrations/`)
+
+Tables (at least): `machines` (id, name, token_hash, created_at, last_seen),
+`jobs` (id, machine_id, action, params_json, status, exit_code, created_at,
+dispatched_at, finished_at), `job_logs` (job_id, seq, stream, chunk, ts),
+`audit_log` (who/what/when for every enqueue and admin action).
+
+### 6.5 Agent (Go)
+
+- **Config:** control-plane URL + agent token from a file (mode `0600`) and/or env.
+- **Connect loop:** dial `wss://`, send `hello` (or auth header), then block on the
+  socket. **Reconnect with exponential backoff + jitter** on any drop — this is the
+  most important part, because if the agent isn't connected, the box is unreachable.
+- **Heartbeat:** periodic `heartbeat` message.
+- **Job execution:** map `job.action` → a handler in `internal/actions`. If the action
+  name isn't in the allowlist, reject and report an error result. Stream stdout/stderr
+  back as `log` messages with sequence numbers; send `result` with the exit code.
+  Enforce `timeoutSec`.
+- **Actions to implement now:**
+  - `healthcheck` — trivial, returns host info. (Use this as the Phase-2 end-to-end test.)
+  - `deploy` — runs the deploy sequence for a PM2 Node app. Make the concrete commands
+    (`git pull`, `npm ci --omit=dev`, `pm2 reload <ecosystem>`) **defined in the agent**,
+    parameterized only by validated `params` (e.g. branch name validated against a safe
+    pattern). The control plane chooses the action; it never supplies the command string.
+- **Privilege:** runs as a non-root service user. Document a narrow `sudoers` entry for
+  only the specific deploy commands it needs. Verify (pin) the control-plane TLS cert.
+
+---
+
+## 7. Security requirements (treat as acceptance criteria, not suggestions)
+
+1. Agent makes **outbound connections only**; managed server needs no inbound ports.
+   README must show closing inbound in the security group / firewall.
+2. **No arbitrary command execution.** The agent only runs named, allowlisted actions
+   with validated params. Adding an action is a code change, reviewable in a PR.
+3. Agent tokens are **per-machine, hashed at rest, revocable, rotatable**, stored `0600`.
+4. Admin API uses **separate** credentials from agent tokens.
+5. The control plane is the trust anchor — document this explicitly in `README` and
+   `SECURITY.md`: compromising the Worker means command over connected agents, so the
+   allowlist is the blast-radius limiter.
+6. All released binaries ship with **SHA-256 checksums**; sign with **cosign/Sigstore**.
+   Installer should support pinning a version, not only `latest`.
+
+---
+
+## 8. Distribution & release
+
+- **`.goreleaser.yaml`:** cross-compile `linux/amd64`, `linux/arm64` (add darwin for
+  local dev); strip with `-ldflags="-s -w"`; produce checksums; sign with cosign; build
+  `.deb` and `.rpm` (via nfpm) that install and enable the systemd unit; build and push a
+  Docker image to GHCR. Trigger from a GitHub Actions workflow on tag push.
+- **`install.sh`:** detect OS/arch, download the matching binary from GitHub Releases,
+  verify checksum, install to `/usr/local/bin`, install + enable the systemd unit,
+  prompt for (or accept via env) the control-plane URL and enrollment token. Target UX:
+  ```
+  curl -fsSL https://<host>/install.sh | sh
+  ```
+- **systemd unit:** runs as non-root, `Restart=always`, reconnect handled by the agent.
+
+---
+
+## 9. Build order (each phase must run + be testable before the next)
+
+**Phase 0 — Protocol & scaffolding.** Write `PROTOCOL.md`. Scaffold both packages,
+`wrangler.toml`, `go.mod`, Apache-2.0 LICENSE, README skeleton.
+
+**Phase 1 — Live connection.** Worker accepts a wss upgrade, validates a single static
+token, routes to a DO that accepts the socket via the Hibernation API and answers
+heartbeats. Go agent connects, authenticates, heartbeats, and reconnects with backoff.
+*Test:* agent shows connected; kill/restore network and confirm it reconnects; confirm
+the DO hibernates when idle.
+
+**Phase 2 — End-to-end job.** Admin endpoint enqueues a `healthcheck` job; DO pushes it;
+agent runs it, streams logs, returns a result; control plane records status + logs.
+*Test:* `POST` a job, watch logs arrive, see a final exit code.
+
+**Phase 3 — Persistence & enrollment.** Add D1 (machines, jobs, job_logs, audit_log).
+Implement machine enrollment (one-time token issue), `GET /api/machines`,
+`GET /api/jobs/:id`, hashed token storage.
+*Test:* enroll a machine, connect with the issued token, list machines/jobs from D1.
+
+**Phase 4 — Real deploy + hardening.** Implement the `deploy` action (PM2/Node) with
+param validation and the sudoers doc. Add online/offline tracking, job timeouts, and
+interrupted-job semantics.
+*Test:* run a deploy against a sample PM2 app; verify zero-downtime `pm2 reload`.
+
+**Phase 5 — Distribution.** GoReleaser config + GitHub Actions release workflow,
+`install.sh`, systemd unit, `.deb`/`.rpm`, Docker image, checksums + cosign signing.
+*Test:* tag a release, install on a fresh VM via `curl | sh`, agent self-registers
+and connects.
+
+**Phase 6 (optional) — Triggers & UI.** A GitHub webhook endpoint on the Worker that
+enqueues a `deploy` job on push to a branch; a minimal admin web UI (Cloudflare Pages
+or Worker-served) listing machines, triggering jobs, and live-streaming logs over wss.
+
+---
+
+## 10. Quality bar
+
+- TypeScript strict mode; Go `vet` + `staticcheck` clean.
+- Unit tests for: token auth/rejection, action allowlist enforcement (reject unknown +
+  reject injection attempts in params), reconnect/backoff, job state transitions.
+- `README.md`: what it is, the security model, quick start (install + enroll + deploy),
+  and a clear statement of the trust model. `SECURITY.md` for disclosure + threat model.
+- `PROTOCOL.md` kept in sync with the TS and Go type definitions; treat protocol changes
+  as versioned and backward-compatible where possible.
+
+---
+
+- Final project name ("Outpost") and the `github.com/aryanvikash/outpost` module path.
+
+## 11. Decisions to confirm with me before/while building
+
+
+- Control-plane hostname / domain for the Worker and the installer.
+- Whether the admin UI is in scope for v1 or API-only.
+- Heartbeat interval and default job timeout.
+- Which extra actions beyond `deploy`/`healthcheck` to ship in v1 (e.g. `restart`,
+  `rollback`, `run-migration`).
+
+Start with Phase 0 and Phase 1. Show me the `PROTOCOL.md` and the minimal connecting
+agent + Worker before going further.

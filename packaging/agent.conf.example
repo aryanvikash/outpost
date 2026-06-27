@@ -1,0 +1,26 @@
+# Outpost agent configuration.
+#
+# This file is normally written for you by `outpost-agent add` during enrollment.
+# It holds NO secret — the device's secret is the private key at key_path (0600).
+# Location: /etc/outpost/agent.conf (mode 0600, owned by the outpost user).
+
+# Control-plane WebSocket endpoint (the /connect route on your Worker).
+url=wss://outpost.example.com/connect
+
+# The machine id assigned at enrollment (returned by `outpost-agent add`).
+machine_id=m_xxxxxxxx
+
+# Path to the device's Ed25519 private key (generated on this box, never shared).
+key_path=/etc/outpost/agent.key
+
+# To enroll this device (generates the keypair + writes this file and the key):
+#   outpost-agent add --url wss://outpost.example.com/connect --token oet_xxxxx
+#
+# --- Deploy target (read from the environment by the deploy action) -----------
+# Set these in the systemd unit's Environment= or a drop-in. Defaults:
+#   OUTPOST_APP_DIR=/srv/app
+#   OUTPOST_PM2_TARGET=ecosystem.config.js
+#   OUTPOST_GIT_REMOTE=origin
+#
+# TLS certificate pinning (optional, recommended):
+#   OUTPOST_TLS_PIN=<base64 SHA-256 of the server cert SubjectPublicKeyInfo>

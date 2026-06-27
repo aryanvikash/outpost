@@ -1,0 +1,122 @@
+# GoReleaser config for the Outpost agent.
+# Docs: https://goreleaser.com  —  validate locally with `goreleaser check`.
+version: 2
+
+project_name: outpost
+
+before:
+  hooks:
+    - sh -c "cd agent && go mod tidy"
+
+builds:
+  - id: outpost-agent
+    dir: agent
+    main: ./cmd/outpost-agent
+    binary: outpost-agent
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - PROTOCOL.md
+      - packaging/systemd/outpost-agent.service
+      - packaging/agent.conf.example
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Keyless signing of the checksums file with cosign/Sigstore.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
+# Linux packages that install the binary, systemd unit, and a non-root user.
+nfpms:
+  - id: packages
+    package_name: outpost-agent
+    vendor: The Outpost Authors
+    homepage: https://github.com/aryanvikash/outpost
+    maintainer: The Outpost Authors <noreply@example.com>
+    description: Outbound-only remote command/deploy agent.
+    license: Apache-2.0
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    contents:
+      - src: packaging/systemd/outpost-agent.service
+        dst: /lib/systemd/system/outpost-agent.service
+      - src: packaging/agent.conf.example
+        dst: /etc/outpost/agent.conf.example
+        type: config
+      - src: packaging/sudoers/outpost-agent
+        dst: /usr/share/doc/outpost-agent/sudoers.example
+    scripts:
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
+
+dockers:
+  - image_templates:
+      - "ghcr.io/aryanvikash/outpost-agent:{{ .Version }}-amd64"
+    dockerfile: packaging/Dockerfile
+    use: buildx
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+  - image_templates:
+      - "ghcr.io/aryanvikash/outpost-agent:{{ .Version }}-arm64"
+    dockerfile: packaging/Dockerfile
+    use: buildx
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/aryanvikash/outpost-agent:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/aryanvikash/outpost-agent:{{ .Version }}-amd64"
+      - "ghcr.io/aryanvikash/outpost-agent:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/aryanvikash/outpost-agent:latest"
+    image_templates:
+      - "ghcr.io/aryanvikash/outpost-agent:{{ .Version }}-amd64"
+      - "ghcr.io/aryanvikash/outpost-agent:{{ .Version }}-arm64"
+
+release:
+  github:
+    owner: aryanvikash
+    name: outpost
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
