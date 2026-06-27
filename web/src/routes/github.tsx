@@ -22,14 +22,24 @@ function AppCard() {
         <CardTitle className="flex items-center gap-2">
           <Github className="h-4 w-4" /> GitHub App
         </CardTitle>
-        <a
-          href="https://github.com/settings/apps/new"
-          target="_blank"
-          rel="noreferrer"
-          className="text-sm text-primary underline-offset-2 hover:underline"
-        >
-          Create App ↗
-        </a>
+        <div className="flex items-center gap-3 text-sm">
+          <a
+            href="https://github.com/settings/apps/new"
+            target="_blank"
+            rel="noreferrer"
+            className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Create App ↗
+          </a>
+          <a
+            href="https://github.com/settings/apps"
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Install App ↗
+          </a>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
