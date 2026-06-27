@@ -66,14 +66,16 @@ export function DashboardPage() {
   });
 
   const all = machines.data ?? [];
-  const online = all.filter((m) => m.status === "online").length;
+  const visible = all.filter((m) => !m.revoked); // hide revoked from the main view
+  const revokedCount = all.length - visible.length;
+  const online = visible.filter((m) => m.status === "online").length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">Fleet</h1>
         <div className="flex gap-2.5">
-          <Stat label="machines" value={all.length} />
+          <Stat label="machines" value={visible.length} />
           <Stat label="online" value={online} live />
         </div>
       </div>
@@ -95,7 +97,7 @@ export function DashboardPage() {
             {machines.isError && (
               <p className="text-sm text-red-400">{(machines.error as Error).message}</p>
             )}
-            {all.map((m) => (
+            {visible.map((m) => (
               <MachineRow
                 key={m.id}
                 m={m}
@@ -103,7 +105,7 @@ export function DashboardPage() {
                 onSelect={() => setSelected(m.id)}
               />
             ))}
-            {machines.data?.length === 0 && (
+            {!machines.isLoading && visible.length === 0 && (
               <div className="grid place-items-center gap-2 py-10 text-center text-muted-foreground">
                 <Server className="h-7 w-7 opacity-50" />
                 <p className="text-sm">No machines yet.</p>
@@ -112,13 +114,18 @@ export function DashboardPage() {
                 </Button>
               </div>
             )}
+            {revokedCount > 0 && (
+              <p className="pt-1 text-center text-[11px] text-muted-foreground/50">
+                {revokedCount} revoked hidden
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        {selected ? (
+        {selected && visible.some((m) => m.id === selected) ? (
           <MachinePanel
             key={selected}
-            machine={all.find((m) => m.id === selected)}
+            machine={visible.find((m) => m.id === selected)}
             machineId={selected}
           />
         ) : (

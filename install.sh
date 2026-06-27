@@ -13,6 +13,7 @@
 #   OUTPOST_URL          control-plane wss URL       (else prompted)
 #   OUTPOST_ENROLL_TOKEN one-time enroll token oet_… (else prompted)
 #   OUTPOST_NAME         optional machine name (defaults to hostname)
+#   OUTPOST_FORCE_ENROLL set to 1 to drop the existing identity and re-enroll
 #   OUTPOST_REPO         github owner/repo (default: aryanvikash/outpost)
 #   OUTPOST_NO_SERVICE   set to 1 to skip systemd enable/start
 set -eu
@@ -140,11 +141,18 @@ download "https://raw.githubusercontent.com/$REPO/$VERSION/packaging/systemd/out
   || err "could not fetch systemd unit"
 $SUDO install -m 0644 "$unit" /lib/systemd/system/outpost-agent.service
 
+# Re-enroll: OUTPOST_FORCE_ENROLL=1 drops the existing identity so a fresh enroll
+# token registers a NEW machine (use after revoking the old one).
+if [ "${OUTPOST_FORCE_ENROLL:-0}" = "1" ]; then
+  log "force re-enroll: removing existing identity"
+  $SUDO rm -f "$CONF_DIR/agent.conf" "$CONF_DIR/agent.key"
+fi
+
 # Enroll: generate a device keypair locally and register its public key. This
 # writes the private key (0600) and config under /etc/outpost.
 if [ -n "$URL" ] && [ -n "$ENROLL_TOKEN" ]; then
   if [ -f "$CONF_DIR/agent.conf" ] && [ -f "$CONF_DIR/agent.key" ]; then
-    log "device already enrolled ($CONF_DIR/agent.key exists); skipping enroll"
+    log "device already enrolled ($CONF_DIR/agent.key exists); skipping enroll (OUTPOST_FORCE_ENROLL=1 to re-enroll)"
   else
     log "enrolling device"
     $SUDO env OUTPOST_URL="$URL" OUTPOST_ENROLL_TOKEN="$ENROLL_TOKEN" OUTPOST_NAME="$NAME" \
