@@ -50,7 +50,7 @@ DEFAULT_JOB_TIMEOUT_SEC = "300"
 #   wrangler secret put GITHUB_WEBHOOK_SECRET    # the App's webhook secret
 #   wrangler secret put GITHUB_APP_PRIVATE_KEY   # PKCS#8 PEM (BEGIN PRIVATE KEY)
 # GITHUB_APP_ID is non-secret and may live here:
-# GITHUB_APP_ID = "123456"
+GITHUB_APP_ID = "4160292"
 #
 # Convert GitHub's PKCS#1 key to PKCS#8 once:
 #   openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in app.pem -out app.pkcs8.pem
