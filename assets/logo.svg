@@ -1,0 +1,17 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Outpost logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7469F2"/>
+      <stop offset="1" stop-color="#9D63EE"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="60" fill="url(#bg)"/>
+  <!-- A single anchored node broadcasting outward: the agent dials OUT,
+       never listens. The mark IS the trust model. -->
+  <g stroke="#FFFFFF" stroke-width="15" stroke-linecap="round" fill="none">
+    <path d="M90 122 A44 44 0 0 1 134 166" opacity="0.95"/>
+    <path d="M90 88 A78 78 0 0 1 168 166" opacity="0.70"/>
+    <path d="M90 54 A112 112 0 0 1 202 166" opacity="0.45"/>
+  </g>
+  <circle cx="90" cy="166" r="15" fill="#FFFFFF"/>
+</svg>

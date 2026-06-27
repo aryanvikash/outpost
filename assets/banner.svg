@@ -1,0 +1,51 @@
+<svg width="1300" height="300" viewBox="0 0 1300 300" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Outpost — run deploys and commands on remote servers, outbound-only, no open ports, no SSH">
+  <defs>
+    <linearGradient id="bgd" x1="0" y1="0" x2="1300" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B0D1A"/>
+      <stop offset="1" stop-color="#141029"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="0.85" cy="-0.1" r="0.6">
+      <stop offset="0" stop-color="#7469F2" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#7469F2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.04" cy="1.1" r="0.6">
+      <stop offset="0" stop-color="#9D63EE" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#9D63EE" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="140" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7469F2"/>
+      <stop offset="1" stop-color="#9D63EE"/>
+    </linearGradient>
+    <linearGradient id="word" x1="280" y1="110" x2="640" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#CAC4FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1300" height="300" fill="url(#bgd)"/>
+  <rect width="1300" height="300" fill="url(#glow1)"/>
+  <rect width="1300" height="300" fill="url(#glow2)"/>
+
+  <!-- logo mark: a single anchored node broadcasting outward — the agent dials
+       OUT, never listens. The mark IS the trust model. -->
+  <g transform="translate(90 80)">
+    <rect width="140" height="140" rx="34" fill="url(#mark)"/>
+    <g stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" fill="none">
+      <path d="M50 68 A24 24 0 0 1 74 92" opacity="0.95"/>
+      <path d="M50 48 A44 44 0 0 1 94 92" opacity="0.70"/>
+      <path d="M50 30 A62 62 0 0 1 112 92" opacity="0.45"/>
+    </g>
+    <circle cx="50" cy="92" r="9" fill="#FFFFFF"/>
+  </g>
+
+  <!-- wordmark. textLength + lengthAdjust lock the rendered width so layout is
+       stable across GitHub / browsers whatever font the viewer falls back to;
+       the 1300-wide canvas leaves margin for renderers that ignore textLength. -->
+  <text x="280" y="158" font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="86" font-weight="700" letter-spacing="-1" fill="url(#word)" textLength="330" lengthAdjust="spacingAndGlyphs">Outpost</text>
+
+  <!-- tagline -->
+  <text x="283" y="200" font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="25" font-weight="400" fill="#AEB3C9" textLength="760" lengthAdjust="spacingAndGlyphs">Run deploys &amp; commands on remote servers &#8212; no open ports, no SSH.</text>
+
+  <!-- feature line -->
+  <text x="284" y="240" font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="17" font-weight="600" letter-spacing="0.8" fill="#7C83A6" textLength="820" lengthAdjust="spacingAndGlyphs">OUTBOUND-ONLY&#160;&#160;&#183;&#160;&#160;ED25519 PER-DEVICE&#160;&#160;&#183;&#160;&#160;ALLOWLISTED ACTIONS&#160;&#160;&#183;&#160;&#160;CLOUDFLARE</text>
+</svg>
