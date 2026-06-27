@@ -138,9 +138,21 @@ if [ -z "$URL" ] && [ -t 0 ]; then printf "Control-plane URL (wss://...): "; rea
 if [ -z "$ENROLL_TOKEN" ] && [ -t 0 ]; then printf "Enroll token (oet_...): "; read -r ENROLL_TOKEN; fi
 
 # Run user: the agent runs as a REAL login user so deploy hooks can reach that
-# user's app dirs, git, node, and pm2 with no extra setup. Default to whoever
-# invoked the installer via sudo; fall back to a prompt, then root.
+# user's app dirs, git, node, and pm2 with no extra setup.
+# Priority:  1) OUTPOST_RUN_USER env var (explicit)
+#            2) SUDO_USER (the user who called sudo — most reliable)
+#            3) First login user with UID >= 1000 (direct root/pipe install)
+#            4) interactive prompt
+#            5) root (last resort)
 RUN_USER="${OUTPOST_RUN_USER:-${SUDO_USER:-}}"
+if [ -z "$RUN_USER" ] || [ "$RUN_USER" = "root" ]; then
+  # Try to find the first real (non-system) login user automatically.
+  _auto="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /nologin|false/ {print $1; exit}')"
+  if [ -n "$_auto" ] && [ "$_auto" != "root" ]; then
+    RUN_USER="$_auto"
+    log "detected run user: $RUN_USER (override with OUTPOST_RUN_USER=<user>)"
+  fi
+fi
 if [ -z "$RUN_USER" ] || [ "$RUN_USER" = "root" ]; then
   if [ -t 0 ]; then printf "Run the agent as which user? [root]: "; read -r RUN_USER; fi
   RUN_USER="${RUN_USER:-root}"
