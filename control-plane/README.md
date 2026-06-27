@@ -61,9 +61,12 @@ Non-secret config lives in `wrangler.toml [vars]`; secrets are set with
 | `GITHUB_WEBHOOK_SECRET` | secret | — | verify GitHub App webhook signatures |
 | `GITHUB_APP_PRIVATE_KEY` | secret | — | PKCS#8 PEM, for commit-status feedback |
 | `GITHUB_APP_ID` | var | — | the GitHub App id |
+| `BITBUCKET_WEBHOOK_SECRET` | secret | — | verify Bitbucket webhook signatures |
+| `BITBUCKET_ACCESS_TOKEN` | secret | — | post Bitbucket commit build-status feedback |
+| `BITBUCKET_API_BASE` | var | `https://api.bitbucket.org/2.0` | override for Server/DC |
 
-The GitHub vars are optional — without them, auto-deploy on push (Phase 6) is
-simply inactive. See the [root README](../README.md#auto-deploy-on-push-github-app).
+The GitHub/Bitbucket vars are optional — without them, auto-deploy on push is
+simply inactive. See the [root README](../README.md#auto-deploy-on-push).
 
 ## API
 
@@ -97,7 +100,24 @@ session JWT from `/api/admin/login`). Device-facing routes use their own auth.
 |--------|------|------|
 | POST | `/enroll` | **enroll token** (`oet_…`) — registers a device's public key |
 | GET | `/connect` | **device-signed EdDSA JWT** — opens the agent WebSocket |
-| POST | `/webhooks/github` | **GitHub webhook signature** (HMAC) |
+| POST | `/webhooks/github` | **GitHub webhook signature** (HMAC `X-Hub-Signature-256`) |
+| POST | `/webhooks/bitbucket` | **Bitbucket webhook signature** (HMAC `X-Hub-Signature`) |
+
+### Auto-deploy on push
+
+Both providers verify an HMAC signature on each delivery, look up `repo + branch`
+bindings, and enqueue the bound action (default: `deploy` that branch).
+
+- **GitHub** — a GitHub App delivers `push` events to `/webhooks/github`; the job
+  carries the installation id + head SHA so the Durable Object posts commit-status
+  feedback (pending → success/failure) on completion. See [`github-app.ts`](./src/github-app.ts).
+- **Bitbucket** — a per-repo webhook delivers `repo:push` to `/webhooks/bitbucket`.
+  A single push can touch several branches (`push.changes[]`), so it fans out over
+  them. The push→deploy path is complete; posting terminal **build-status**
+  feedback back to the commit is a documented follow-up (the
+  [`setBuildStatus`](./src/bitbucket.ts) poster is ready, but the job needs to
+  carry Bitbucket context so the DO can call it on completion, the way the GitHub
+  path uses the installation id).
 
 The admin token is never used on device routes, and device credentials are never
 used on admin routes.
@@ -130,8 +150,10 @@ src/admin-auth.ts    admin token + session-JWT verification
 src/device-auth.ts   device connect-JWT (EdDSA) verification
 src/enqueue.ts       job enqueue + validation
 src/actions.ts       action allowlist + param schemas (server side)
-src/github-app.ts    GitHub App JWT, commit statuses
+src/github-app.ts    GitHub App JWT, commit statuses, HMAC verify
 src/webhooks.ts      GitHub push webhook → enqueue bound deploys
+src/bitbucket.ts     Bitbucket signature verify, repo:push parsing, build status
+src/webhooks-bitbucket.ts  Bitbucket repo:push webhook → enqueue bound deploys
 src/crypto.ts        hashing/signing helpers
 src/env.ts           typed env + feature flags
 migrations/          D1 schema (numbered SQL)

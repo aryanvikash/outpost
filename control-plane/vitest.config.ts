@@ -20,6 +20,7 @@ export default defineWorkersConfig(async () => {
             bindings: {
               ADMIN_TOKEN: "test-admin-token",
               GITHUB_WEBHOOK_SECRET: "test-webhook-secret",
+              BITBUCKET_WEBHOOK_SECRET: "test-webhook-secret",
               TEST_MIGRATIONS: migrations,
             },
           },

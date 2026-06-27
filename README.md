@@ -237,12 +237,18 @@ All admin routes require `Authorization: Bearer $ADMIN_TOKEN`. Device-facing
 routes are separate: `POST /enroll` is authorized by an **enroll token**, and
 `GET /connect` by a **device-signed JWT** — never the admin token.
 
-## Auto-deploy on push (GitHub App)
+## Auto-deploy on push
 
-Outpost can deploy automatically when you push, using a **GitHub App** — install
-it on a repo and `push` events flow to the control plane natively (no per-repo
-webhook to create). On a matching push it enqueues the bound action and posts a
-commit status (pending → success/failure) back to the commit.
+Outpost can deploy automatically when you push. The control plane verifies an
+HMAC signature on each webhook delivery, looks up `repo + branch` bindings, and
+enqueues the bound action (default: `deploy` that branch). **GitHub** and
+**Bitbucket** are both supported.
+
+### GitHub App
+
+Install a **GitHub App** on a repo and `push` events flow to the control plane
+natively (no per-repo webhook to create). On a matching push it enqueues the bound
+action and posts a commit status (pending → success/failure) back to the commit.
 
 1. **Create a GitHub App** (Settings → Developer settings → GitHub Apps):
    - Webhook URL: `https://<your-worker>/webhooks/github`
@@ -270,6 +276,30 @@ Now `git push origin main` to `acme/web` runs `deploy {branch:"main"}` on the
 bound machine, with status reported on the commit. Only the `GITHUB_WEBHOOK_SECRET`
 is required to accept deliveries; the App id/key are only needed for commit-status
 feedback. Without them, Phase 6 is inactive.
+
+### Bitbucket
+
+Bitbucket uses a **per-repo webhook** (no App model). On a matching `repo:push` it
+enqueues the bound action; a single push can touch several branches and each is
+handled.
+
+1. **Add the webhook** (Repository settings → Webhooks → Add webhook):
+   - URL: `https://<your-worker>/webhooks/bitbucket`
+   - Secret: a random string
+   - Triggers: **Repository push**
+2. **Configure the Worker secrets:**
+   ```sh
+   wrangler secret put BITBUCKET_WEBHOOK_SECRET   # the webhook secret
+   wrangler secret put BITBUCKET_ACCESS_TOKEN     # optional: commit build-status feedback
+   ```
+3. **Bind a repo+branch to a machine** (same `/api/bindings` call as above; use the
+   `workspace/repo` slug).
+
+The `BITBUCKET_WEBHOOK_SECRET` is required to accept deliveries; the access token
+is only needed for build-status feedback. See
+[`control-plane/README.md`](./control-plane/README.md#auto-deploy-on-push) for the
+current scope (push→deploy is complete; terminal build-status feedback is a
+documented follow-up).
 
 ## Development
 
