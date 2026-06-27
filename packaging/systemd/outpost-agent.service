@@ -1,0 +1,34 @@
+[Unit]
+Description=Outpost agent (outbound-only remote command/deploy agent)
+Documentation=https://github.com/aryanvikash/outpost
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as a dedicated non-root user created by the package/installer.
+User=outpost
+Group=outpost
+ExecStart=/usr/local/bin/outpost-agent --config /etc/outpost/agent.conf
+Restart=always
+RestartSec=5
+# The agent reconnects on its own; this restart is only for crashes.
+
+# --- Hardening ---------------------------------------------------------------
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# The agent needs to read its config and (for deploy) write the app dir; grant
+# the latter explicitly on hosts that deploy:
+ReadOnlyPaths=/etc/outpost
+# ReadWritePaths=/srv/app
+
+[Install]
+WantedBy=multi-user.target

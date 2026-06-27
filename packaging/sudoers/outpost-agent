@@ -1,0 +1,21 @@
+# Narrow sudoers entry for the Outpost agent's deploy action.
+#
+# Install to /etc/sudoers.d/outpost-agent (mode 0440), then validate with:
+#   sudo visudo -cf /etc/sudoers.d/outpost-agent
+#
+# The agent runs as the non-root `outpost` user. It only needs elevated rights
+# for the *specific* commands the deploy/restart actions invoke — never a shell.
+# Pin the absolute binary paths (check them with `command -v pm2 npm git`).
+#
+# Prefer running PM2 as the app's own service user rather than root where possible.
+# This example assumes a deploy user `appuser` owns /srv/app and runs PM2.
+
+# Allow the agent to run PM2 as the app user (zero-downtime reloads).
+outpost ALL=(appuser) NOPASSWD: /usr/bin/pm2 reload *
+
+# If git/npm must run as the app user too:
+outpost ALL=(appuser) NOPASSWD: /usr/bin/git -C /srv/app *
+outpost ALL=(appuser) NOPASSWD: /usr/bin/npm --prefix /srv/app ci *
+
+# NOTE: keep this list as tight as the action set. Every line here widens the
+# blast radius if the control plane is compromised. Review on every action change.

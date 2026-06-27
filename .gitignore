@@ -1,0 +1,40 @@
+# ─── Secrets & keys (NEVER commit) ───────────────────────────────────────────
+# Device private keys
+*.key
+agent.key
+# GitHub App private keys (PKCS#1 download + PKCS#8 conversion)
+*.pem
+app.pkcs8.pem
+# Worker local secrets / env files
+.dev.vars
+.env
+.env.*
+!.env.example
+*.local
+
+# ─── Go (agent) ──────────────────────────────────────────────────────────────
+# NOTE: only the built binary, not the cmd/outpost-agent/ source dir.
+/agent/outpost-agent
+*.test
+*.out
+coverage.txt
+
+# ─── Node / control plane / web ──────────────────────────────────────────────
+node_modules/
+.wrangler/
+dist/
+.vite/
+*.log
+*.tsbuildinfo
+
+# ─── GoReleaser / release artifacts ──────────────────────────────────────────
+/dist/
+*.tar.gz
+checksums.txt
+
+# ─── OS / editor ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
