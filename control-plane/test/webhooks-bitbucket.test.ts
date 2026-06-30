@@ -35,12 +35,18 @@ function pushBody(repo: string, branch: string, sha = "abc123def456"): string {
   });
 }
 
-async function deliver(event: string, body: string, sig?: string): Promise<Response> {
+async function deliver(
+  event: string,
+  body: string,
+  sig?: string,
+  deliveryId?: string,
+): Promise<Response> {
   const headers = new Headers({
     "X-Event-Key": event,
     "Content-Type": "application/json",
   });
   if (sig !== undefined) headers.set("X-Hub-Signature", sig);
+  if (deliveryId !== undefined) headers.set("X-Request-UUID", deliveryId);
   return SELF.fetch(
     new Request("https://cp.test/webhooks/bitbucket", { method: "POST", body, headers }),
   );
@@ -168,6 +174,30 @@ describe("bitbucket push → deploy binding", () => {
     const out = (await res.json()) as { matched: number; enqueued: unknown[] };
     expect(out.matched).toBe(2);
     expect(out.enqueued).toHaveLength(2);
+  });
+
+  it("de-dups a redelivered push (same X-Request-UUID)", async () => {
+    const machineId = await enroll("bb-dedup");
+    await SELF.fetch(
+      adminReq("/api/bindings", {
+        method: "POST",
+        body: JSON.stringify({ repo: "acme/dedup-bb", branch: "main", machineId }),
+      }),
+    );
+    const body = pushBody("acme/dedup-bb", "main");
+    const sig = await sign(body);
+
+    const first = await deliver("repo:push", body, sig, "bb-delivery-1");
+    expect((await first.json()) as { matched: number }).toMatchObject({ matched: 1 });
+
+    const second = await deliver("repo:push", body, sig, "bb-delivery-1");
+    expect((await second.json()) as { duplicate?: boolean }).toMatchObject({
+      duplicate: true,
+    });
+
+    const jobsRes = await SELF.fetch(adminReq(`/api/machines/${machineId}/jobs`));
+    const { jobs } = (await jobsRes.json()) as { jobs: Array<{ action: string }> };
+    expect(jobs.filter((j) => j.action === "deploy")).toHaveLength(1);
   });
 
   it("logs invalid-signature deliveries", async () => {

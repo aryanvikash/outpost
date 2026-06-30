@@ -23,21 +23,27 @@ async function sign(body: string): Promise<string> {
   return `sha256=${hex}`;
 }
 
-function pushBody(repo: string, branch: string): string {
+function pushBody(repo: string, branch: string, sha = "abc123def456"): string {
   return JSON.stringify({
     ref: `refs/heads/${branch}`,
-    after: "abc123def456",
+    after: sha,
     repository: { full_name: repo },
     installation: { id: 42 },
   });
 }
 
-async function deliver(event: string, body: string, sig?: string): Promise<Response> {
+async function deliver(
+  event: string,
+  body: string,
+  sig?: string,
+  deliveryId?: string,
+): Promise<Response> {
   const headers = new Headers({
     "X-GitHub-Event": event,
     "Content-Type": "application/json",
   });
   if (sig !== undefined) headers.set("X-Hub-Signature-256", sig);
+  if (deliveryId !== undefined) headers.set("X-GitHub-Delivery", deliveryId);
   return SELF.fetch(
     new Request("https://cp.test/webhooks/github", { method: "POST", body, headers }),
   );
@@ -134,6 +140,60 @@ describe("github push → deploy binding", () => {
       deliveries: Array<{ result: string }>;
     };
     expect(deliveries.some((d) => d.result === "invalid signature")).toBe(true);
+  });
+
+  it("de-dups a redelivered push (same X-GitHub-Delivery)", async () => {
+    const machineId = await enroll("web-dedup");
+    await SELF.fetch(
+      adminReq("/api/bindings", {
+        method: "POST",
+        body: JSON.stringify({ repo: "acme/dedup", branch: "main", machineId }),
+      }),
+    );
+    const body = pushBody("acme/dedup", "main");
+    const sig = await sign(body);
+
+    const first = await deliver("push", body, sig, "delivery-1");
+    expect((await first.json()) as { matched: number }).toMatchObject({ matched: 1 });
+
+    // Same delivery id again → skipped, nothing enqueued.
+    const second = await deliver("push", body, sig, "delivery-1");
+    expect((await second.json()) as { duplicate?: boolean }).toMatchObject({
+      duplicate: true,
+    });
+
+    // Only one job exists for the machine.
+    const jobsRes = await SELF.fetch(adminReq(`/api/machines/${machineId}/jobs`));
+    const { jobs } = (await jobsRes.json()) as { jobs: Array<{ action: string }> };
+    expect(jobs.filter((j) => j.action === "deploy")).toHaveLength(1);
+  });
+
+  it("coalesces queued deploys to the latest commit while offline", async () => {
+    const machineId = await enroll("web-coalesce");
+    await SELF.fetch(
+      adminReq("/api/bindings", {
+        method: "POST",
+        body: JSON.stringify({ repo: "acme/coalesce", branch: "main", machineId }),
+      }),
+    );
+
+    // Agent is offline, so both pushes just queue. Distinct delivery ids so the
+    // second isn't de-duped — it's a genuinely newer commit.
+    const b1 = pushBody("acme/coalesce", "main", "sha-old");
+    const r1 = await deliver("push", b1, await sign(b1), "deliv-old");
+    const j1 = ((await r1.json()) as { enqueued: Array<{ jobId: string }> }).enqueued[0].jobId;
+
+    const b2 = pushBody("acme/coalesce", "main", "sha-new");
+    const r2 = await deliver("push", b2, await sign(b2), "deliv-new");
+    const j2 = ((await r2.json()) as { enqueued: Array<{ jobId: string }> }).enqueued[0].jobId;
+
+    const status = async (id: string) =>
+      ((await (await SELF.fetch(adminReq(`/api/jobs/${id}`))).json()) as { status: string })
+        .status;
+
+    // The older queued deploy is superseded; only the latest stays queued.
+    expect(await status(j1)).toBe("superseded");
+    expect(await status(j2)).toBe("queued");
   });
 
   it("records deliveries for the admin view", async () => {

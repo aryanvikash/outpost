@@ -51,6 +51,14 @@ webhooksBitbucket.post("/bitbucket", async (c) => {
     return c.json({ error: "invalid signature" }, 401);
   }
 
+  // De-dup retries/redeliveries: Bitbucket sends a unique X-Request-UUID per
+  // delivery (reused on resend).
+  const deliveryId = c.req.header("X-Request-UUID");
+  if (deliveryId && !(await db.markDeliverySeen(deliveryId, "bitbucket", now))) {
+    await db.recordDelivery({ ts: now, event, result: "duplicate" });
+    return c.json({ ok: true, duplicate: true });
+  }
+
   // Bitbucket's "test connection" button sends diagnostics:ping.
   if (event === "diagnostics:ping") {
     await db.recordDelivery({ ts: now, event, result: "ping" });

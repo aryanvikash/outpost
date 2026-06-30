@@ -49,6 +49,13 @@ webhooks.post("/github", async (c) => {
     return c.json({ error: "invalid signature" }, 401);
   }
 
+  // De-dup retries/redeliveries: GitHub reuses X-GitHub-Delivery on resend.
+  const deliveryId = c.req.header("X-GitHub-Delivery");
+  if (deliveryId && !(await db.markDeliverySeen(deliveryId, "github", now))) {
+    await db.recordDelivery({ ts: now, event, result: "duplicate" });
+    return c.json({ ok: true, duplicate: true });
+  }
+
   if (event === "ping") {
     await db.recordDelivery({ ts: now, event: "ping", result: "ping" });
     return c.json({ ok: true, pong: true });
