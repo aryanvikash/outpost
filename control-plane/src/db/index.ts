@@ -386,10 +386,9 @@ export class DB {
    * a transient error doesn't permanently dedup the push away.
    */
   async forgetDelivery(deliveryId: string): Promise<void> {
-    await this.d1
-      .prepare(`DELETE FROM webhook_dedup WHERE delivery_id = ?`)
-      .bind(deliveryId)
-      .run();
+    await this.db
+      .delete(webhookDedup)
+      .where(eq(webhookDedup.delivery_id, deliveryId));
   }
 
   async listDeliveries(limit = 50): Promise<WebhookDeliveryRow[]> {
