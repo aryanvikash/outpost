@@ -10,9 +10,12 @@
 // Addressed from the Worker via env.MACHINE_DO.getByName(machineId).
 
 import { DurableObject } from "cloudflare:workers";
+import { and, asc, eq, inArray, lt } from "drizzle-orm";
+import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import type { Env } from "./env";
 import { heartbeatSec, githubAppConfigured, maxQueueAgeSec } from "./env";
 import { DB } from "./db/index";
+import { queue, type QueueRow } from "./db/queue-schema";
 import { setCommitStatus } from "./github-app";
 import {
   PROTOCOL_VERSION,
@@ -41,28 +44,16 @@ const TERMINAL = new Set([
 // push should deploy the latest commit, not replay every intermediate one.
 const COALESCE_ACTIONS = new Set(["deploy"]);
 
-interface QueueRow {
-  job_id: string;
-  action: string;
-  params_json: string;
-  timeout_sec: number;
-  idempotent: number;
-  status: string;
-  created_at: number;
-  dispatched_at: number | null;
-  gh_repo: string | null;
-  gh_sha: string | null;
-  gh_installation_id: number | null;
-  [key: string]: SqlStorageValue;
-}
-
 export class MachineDO extends DurableObject<Env> {
   private db: DB;
+  /** Drizzle over the DO's own SQLite — the per-machine job queue. */
+  private q: DrizzleSqliteDODatabase<{ queue: typeof queue }>;
   private machineIdCache: string | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = new DB(env.DB);
+    this.q = drizzle(ctx.storage, { schema: { queue } });
     ctx.blockConcurrencyWhile(async () => {
       this.ctx.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS queue (
@@ -207,35 +198,36 @@ export class MachineDO extends DurableObject<Env> {
     const repo = job.github?.repo ?? null;
     if (COALESCE_ACTIONS.has(job.action) && repo !== null) {
       const branch = branchOf(job.params);
-      const stale = this.ctx.storage.sql
-        .exec<QueueRow>(
-          `SELECT * FROM queue WHERE status = 'queued' AND action = ? AND gh_repo = ?`,
-          job.action,
-          repo,
+      const stale = this.q
+        .select()
+        .from(queue)
+        .where(
+          and(
+            eq(queue.status, "queued"),
+            eq(queue.action, job.action),
+            eq(queue.gh_repo, repo),
+          ),
         )
-        .toArray()
+        .all()
         .filter((r) => branchOf(safeParams(r.params_json)) === branch);
       for (const old of stale) {
-        this.ctx.storage.sql.exec(`DELETE FROM queue WHERE job_id = ?`, old.job_id);
+        this.q.delete(queue).where(eq(queue.job_id, old.job_id)).run();
         await this.db.setJobStatus(old.job_id, "superseded", { finishedAt: now });
       }
     }
 
-    this.ctx.storage.sql.exec(
-      `INSERT INTO queue
-         (job_id, action, params_json, timeout_sec, idempotent, status, created_at,
-          gh_repo, gh_sha, gh_installation_id)
-       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
-      job.jobId,
-      job.action,
-      JSON.stringify(job.params ?? {}),
-      job.timeoutSec,
-      job.idempotent ? 1 : 0,
-      now,
-      job.github?.repo ?? null,
-      job.github?.sha ?? null,
-      job.github?.installationId ?? null,
-    );
+    this.q.insert(queue).values({
+      job_id: job.jobId,
+      action: job.action,
+      params_json: JSON.stringify(job.params ?? {}),
+      timeout_sec: job.timeoutSec,
+      idempotent: job.idempotent ? 1 : 0,
+      status: "queued",
+      created_at: now,
+      gh_repo: job.github?.repo ?? null,
+      gh_sha: job.github?.sha ?? null,
+      gh_installation_id: job.github?.installationId ?? null,
+    }).run();
 
     const ws = this.agentSocket();
     const dispatched = ws ? await this.dispatchNext(ws) : false;
@@ -258,9 +250,11 @@ export class MachineDO extends DurableObject<Env> {
 
   private async handleStatus(): Promise<Response> {
     const online = this.agentSocket() !== null;
-    const queued = this.ctx.storage.sql
-      .exec<QueueRow>(`SELECT * FROM queue ORDER BY created_at ASC`)
-      .toArray();
+    const queued = this.q
+      .select()
+      .from(queue)
+      .orderBy(asc(queue.created_at))
+      .all();
     return Response.json({ online, queue: queued });
   }
 
@@ -308,10 +302,11 @@ export class MachineDO extends DurableObject<Env> {
         break;
       }
       case "ack": {
-        this.ctx.storage.sql.exec(
-          `UPDATE queue SET status = 'running' WHERE job_id = ?`,
-          msg.jobId,
-        );
+        this.q
+          .update(queue)
+          .set({ status: "running" })
+          .where(eq(queue.job_id, msg.jobId))
+          .run();
         await this.db.setJobStatus(msg.jobId, "running");
         break;
       }
@@ -383,19 +378,21 @@ export class MachineDO extends DurableObject<Env> {
   private async dispatchNext(ws: WebSocket): Promise<boolean> {
     await this.expireStaleQueued();
 
-    const inFlight = this.ctx.storage.sql
-      .exec<QueueRow>(
-        `SELECT * FROM queue WHERE status IN ('dispatched','running') LIMIT 1`,
-      )
-      .toArray();
+    const inFlight = this.q
+      .select()
+      .from(queue)
+      .where(inArray(queue.status, ["dispatched", "running"]))
+      .limit(1)
+      .all();
     if (inFlight.length > 0) return false;
 
-    const next = this.ctx.storage.sql
-      .exec<QueueRow>(
-        `SELECT * FROM queue WHERE status = 'queued'
-          ORDER BY created_at ASC LIMIT 1`,
-      )
-      .toArray();
+    const next = this.q
+      .select()
+      .from(queue)
+      .where(eq(queue.status, "queued"))
+      .orderBy(asc(queue.created_at))
+      .limit(1)
+      .all();
     if (next.length === 0) return false;
 
     const job = next[0];
@@ -410,11 +407,11 @@ export class MachineDO extends DurableObject<Env> {
     };
     ws.send(JSON.stringify(msg));
 
-    this.ctx.storage.sql.exec(
-      `UPDATE queue SET status = 'dispatched', dispatched_at = ? WHERE job_id = ?`,
-      now,
-      job.job_id,
-    );
+    this.q
+      .update(queue)
+      .set({ status: "dispatched", dispatched_at: now })
+      .where(eq(queue.job_id, job.job_id))
+      .run();
     await this.db.setJobStatus(job.job_id, "dispatched", { dispatchedAt: now });
     this.postCommitStatus(job, "pending", `running ${job.action}…`);
     return true;
@@ -427,15 +424,14 @@ export class MachineDO extends DurableObject<Env> {
    */
   private async expireStaleQueued(): Promise<void> {
     const cutoff = Date.now() - maxQueueAgeSec(this.env) * 1000;
-    const stale = this.ctx.storage.sql
-      .exec<QueueRow>(
-        `SELECT * FROM queue WHERE status = 'queued' AND created_at < ?`,
-        cutoff,
-      )
-      .toArray();
+    const stale = this.q
+      .select()
+      .from(queue)
+      .where(and(eq(queue.status, "queued"), lt(queue.created_at, cutoff)))
+      .all();
     const now = Date.now();
     for (const job of stale) {
-      this.ctx.storage.sql.exec(`DELETE FROM queue WHERE job_id = ?`, job.job_id);
+      this.q.delete(queue).where(eq(queue.job_id, job.job_id)).run();
       await this.db.setJobStatus(job.job_id, "expired", {
         finishedAt: now,
         error: "expired before dispatch (queue TTL)",
@@ -455,11 +451,13 @@ export class MachineDO extends DurableObject<Env> {
     if (exitCode === 130) status = "canceled";
 
     // Read the row (for GitHub context) before removing it from the queue.
-    const rows = this.ctx.storage.sql
-      .exec<QueueRow>(`SELECT * FROM queue WHERE job_id = ?`, jobId)
-      .toArray();
+    const rows = this.q
+      .select()
+      .from(queue)
+      .where(eq(queue.job_id, jobId))
+      .all();
 
-    this.ctx.storage.sql.exec(`DELETE FROM queue WHERE job_id = ?`, jobId);
+    this.q.delete(queue).where(eq(queue.job_id, jobId)).run();
     await this.db.setJobStatus(jobId, status, {
       exitCode,
       error,
@@ -523,27 +521,25 @@ export class MachineDO extends DurableObject<Env> {
     const machineId = await this.getMachineId();
     if (!machineId) return;
 
-    const inFlight = this.ctx.storage.sql
-      .exec<QueueRow>(
-        `SELECT * FROM queue WHERE status IN ('dispatched','running')`,
-      )
-      .toArray();
+    const inFlight = this.q
+      .select()
+      .from(queue)
+      .where(inArray(queue.status, ["dispatched", "running"]))
+      .all();
 
     const now = Date.now();
     for (const job of inFlight) {
       if (job.idempotent) {
         // Safe to retry: reset to queued, delivered on next connect.
-        this.ctx.storage.sql.exec(
-          `UPDATE queue SET status = 'queued', dispatched_at = NULL WHERE job_id = ?`,
-          job.job_id,
-        );
+        this.q
+          .update(queue)
+          .set({ status: "queued", dispatched_at: null })
+          .where(eq(queue.job_id, job.job_id))
+          .run();
         await this.db.setJobStatus(job.job_id, "queued");
       } else {
         // Non-idempotent: terminate as interrupted, require manual re-enqueue.
-        this.ctx.storage.sql.exec(
-          `DELETE FROM queue WHERE job_id = ?`,
-          job.job_id,
-        );
+        this.q.delete(queue).where(eq(queue.job_id, job.job_id)).run();
         await this.db.setJobStatus(job.job_id, "interrupted", {
           finishedAt: now,
           error: "connection lost before result",

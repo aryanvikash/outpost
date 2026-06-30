@@ -146,6 +146,7 @@ src/worker.ts        Hono app: admin API + device routes, mounts the DO
 src/machine-do.ts    MachineDO — the per-machine WebSocket server + job queue (SQLite)
 src/db/index.ts      D1 access layer (Drizzle ORM; machines, jobs, logs, audit)
 src/db/schema.ts     Drizzle table schema (mirrors migrations/, derives row types)
+src/db/queue-schema.ts  Drizzle schema for the MachineDO's own SQLite queue
 src/protocol.ts      TS types mirroring PROTOCOL.md (wire contract)
 src/admin-auth.ts    admin token + session-JWT verification
 src/device-auth.ts   device connect-JWT (EdDSA) verification
