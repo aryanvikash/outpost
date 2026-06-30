@@ -1,60 +1,20 @@
-// D1 query helpers. All fleet-wide reads/writes go through here so the SQL is in
-// one auditable place.
+// D1 query layer. All fleet-wide reads/writes go through here so the data access
+// is in one auditable place. Backed by Drizzle ORM over the schema in ./schema,
+// which is type-checked against the real columns; the hand-written SQL in
+// ./migrations remains the source of truth for the DDL.
 
-export interface MachineRow {
-  id: string;
-  name: string;
-  public_key: string; // base64 raw Ed25519 public key
-  status: string;
-  agent_version: string | null;
-  created_at: number;
-  last_seen: number | null;
-  revoked_at: number | null;
-  deploy_json: string | null;
-  hooks_json: string | null;
-  hook_issues_json: string | null;
-}
+import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
+import * as schema from "./schema";
 
-export interface EnrollTokenRow {
-  id: string;
-  token_hash: string;
-  label: string | null;
-  created_by: string | null;
-  created_at: number;
-  expires_at: number | null;
-  remaining_uses: number;
-  used_at: number | null;
-  last_machine_id: string | null;
-}
-
-export interface JobRow {
-  id: string;
-  machine_id: string;
-  action: string;
-  params_json: string;
-  status: string;
-  exit_code: number | null;
-  error: string | null;
-  timeout_sec: number;
-  idempotent: number;
-  created_at: number;
-  dispatched_at: number | null;
-  finished_at: number | null;
-  enqueued_by: string | null;
-  gh_repo: string | null;
-  gh_sha: string | null;
-  gh_installation_id: number | null;
-}
-
-export interface RepoBindingRow {
-  id: string;
-  repo_full_name: string;
-  branch: string;
-  machine_id: string;
-  action: string;
-  params_json: string;
-  created_at: number;
-}
+// Row types are inferred from the schema, so a renamed/removed column is a
+// compile error at every call site instead of a silent runtime mismatch.
+export type MachineRow = typeof schema.machines.$inferSelect;
+export type EnrollTokenRow = typeof schema.enrollTokens.$inferSelect;
+export type JobRow = typeof schema.jobs.$inferSelect;
+export type RepoBindingRow = typeof schema.repoBindings.$inferSelect;
+export type WebhookDeliveryRow = typeof schema.webhookDeliveries.$inferSelect;
+export type JobLogRow = typeof schema.jobLogs.$inferSelect;
 
 /** Optional GitHub context attached to a job for commit-status feedback. */
 export interface GithubContext {
@@ -63,28 +23,23 @@ export interface GithubContext {
   installationId: number;
 }
 
-export interface WebhookDeliveryRow {
-  id: number;
-  ts: number;
-  event: string;
-  repo: string | null;
-  branch: string | null;
-  sha: string | null;
-  matched: number;
-  result: string | null;
-  job_ids: string | null;
-}
-
-export interface JobLogRow {
-  job_id: string;
-  seq: number;
-  stream: string;
-  chunk: string;
-  ts: number;
-}
+const {
+  machines,
+  enrollTokens,
+  jobs,
+  jobLogs,
+  repoBindings,
+  webhookDeliveries,
+  webhookDedup,
+  auditLog,
+} = schema;
 
 export class DB {
-  constructor(private readonly d1: D1Database) {}
+  private readonly db: DrizzleD1Database<typeof schema>;
+
+  constructor(d1: D1Database) {
+    this.db = drizzle(d1, { schema });
+  }
 
   // --- machines --------------------------------------------------------------
 
@@ -95,27 +50,31 @@ export class DB {
     agentVersion?: string;
     createdAt: number;
   }): Promise<void> {
-    await this.d1
-      .prepare(
-        `INSERT INTO machines (id, name, public_key, status, agent_version, created_at)
-         VALUES (?, ?, ?, 'offline', ?, ?)`,
-      )
-      .bind(m.id, m.name, m.publicKey, m.agentVersion ?? null, m.createdAt)
-      .run();
+    await this.db.insert(machines).values({
+      id: m.id,
+      name: m.name,
+      public_key: m.publicKey,
+      status: "offline",
+      agent_version: m.agentVersion ?? null,
+      created_at: m.createdAt,
+    });
   }
 
   async getMachine(id: string): Promise<MachineRow | null> {
-    return await this.d1
-      .prepare(`SELECT * FROM machines WHERE id = ?`)
-      .bind(id)
-      .first<MachineRow>();
+    const row = await this.db
+      .select()
+      .from(machines)
+      .where(eq(machines.id, id))
+      .get();
+    return row ?? null;
   }
 
   async listMachines(): Promise<MachineRow[]> {
-    const res = await this.d1
-      .prepare(`SELECT * FROM machines ORDER BY created_at DESC`)
-      .all<MachineRow>();
-    return res.results ?? [];
+    return await this.db
+      .select()
+      .from(machines)
+      .orderBy(desc(machines.created_at))
+      .all();
   }
 
   async setMachineStatus(
@@ -124,57 +83,54 @@ export class DB {
     lastSeen: number,
     agentVersion?: string,
   ): Promise<void> {
-    await this.d1
-      .prepare(
-        `UPDATE machines
-            SET status = ?, last_seen = ?,
-                agent_version = COALESCE(?, agent_version)
-          WHERE id = ?`,
-      )
-      .bind(status, lastSeen, agentVersion ?? null, id)
-      .run();
+    // agentVersion is only updated when provided (COALESCE semantics).
+    await this.db
+      .update(machines)
+      .set({
+        status,
+        last_seen: lastSeen,
+        ...(agentVersion != null ? { agent_version: agentVersion } : {}),
+      })
+      .where(eq(machines.id, id));
   }
 
   async setMachineDeploy(id: string, deployJson: string): Promise<void> {
-    await this.d1
-      .prepare(`UPDATE machines SET deploy_json = ? WHERE id = ?`)
-      .bind(deployJson, id)
-      .run();
+    await this.db
+      .update(machines)
+      .set({ deploy_json: deployJson })
+      .where(eq(machines.id, id));
   }
 
   async setMachineHooks(id: string, hooksJson: string): Promise<void> {
-    await this.d1
-      .prepare(`UPDATE machines SET hooks_json = ? WHERE id = ?`)
-      .bind(hooksJson, id)
-      .run();
+    await this.db
+      .update(machines)
+      .set({ hooks_json: hooksJson })
+      .where(eq(machines.id, id));
   }
 
   async setMachineHookIssues(id: string, hookIssuesJson: string): Promise<void> {
-    await this.d1
-      .prepare(`UPDATE machines SET hook_issues_json = ? WHERE id = ?`)
-      .bind(hookIssuesJson, id)
-      .run();
+    await this.db
+      .update(machines)
+      .set({ hook_issues_json: hookIssuesJson })
+      .where(eq(machines.id, id));
   }
 
   async touchMachine(id: string, lastSeen: number): Promise<void> {
-    await this.d1
-      .prepare(`UPDATE machines SET last_seen = ? WHERE id = ?`)
-      .bind(lastSeen, id)
-      .run();
+    await this.db
+      .update(machines)
+      .set({ last_seen: lastSeen })
+      .where(eq(machines.id, id));
   }
 
   async renameMachine(id: string, name: string): Promise<void> {
-    await this.d1
-      .prepare(`UPDATE machines SET name = ? WHERE id = ?`)
-      .bind(name, id)
-      .run();
+    await this.db.update(machines).set({ name }).where(eq(machines.id, id));
   }
 
   async revokeMachine(id: string, ts: number): Promise<void> {
-    await this.d1
-      .prepare(`UPDATE machines SET revoked_at = ? WHERE id = ?`)
-      .bind(ts, id)
-      .run();
+    await this.db
+      .update(machines)
+      .set({ revoked_at: ts })
+      .where(eq(machines.id, id));
   }
 
   // --- enroll tokens ---------------------------------------------------------
@@ -188,36 +144,32 @@ export class DB {
     expiresAt: number | null;
     remainingUses: number;
   }): Promise<void> {
-    await this.d1
-      .prepare(
-        `INSERT INTO enroll_tokens
-           (id, token_hash, label, created_by, created_at, expires_at, remaining_uses)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        t.id,
-        t.tokenHash,
-        t.label,
-        t.createdBy,
-        t.createdAt,
-        t.expiresAt,
-        t.remainingUses,
-      )
-      .run();
+    await this.db.insert(enrollTokens).values({
+      id: t.id,
+      token_hash: t.tokenHash,
+      label: t.label,
+      created_by: t.createdBy,
+      created_at: t.createdAt,
+      expires_at: t.expiresAt,
+      remaining_uses: t.remainingUses,
+    });
   }
 
   async findEnrollTokenByHash(hash: string): Promise<EnrollTokenRow | null> {
-    return await this.d1
-      .prepare(`SELECT * FROM enroll_tokens WHERE token_hash = ?`)
-      .bind(hash)
-      .first<EnrollTokenRow>();
+    const row = await this.db
+      .select()
+      .from(enrollTokens)
+      .where(eq(enrollTokens.token_hash, hash))
+      .get();
+    return row ?? null;
   }
 
   async listEnrollTokens(): Promise<EnrollTokenRow[]> {
-    const res = await this.d1
-      .prepare(`SELECT * FROM enroll_tokens ORDER BY created_at DESC`)
-      .all<EnrollTokenRow>();
-    return res.results ?? [];
+    return await this.db
+      .select()
+      .from(enrollTokens)
+      .orderBy(desc(enrollTokens.created_at))
+      .all();
   }
 
   /**
@@ -230,17 +182,23 @@ export class DB {
     machineId: string,
     now: number,
   ): Promise<boolean> {
-    const res = await this.d1
-      .prepare(
-        `UPDATE enroll_tokens
-            SET remaining_uses = remaining_uses - 1,
-                used_at = ?,
-                last_machine_id = ?
-          WHERE id = ? AND remaining_uses > 0
-            AND (expires_at IS NULL OR expires_at > ?)`,
-      )
-      .bind(now, machineId, id, now)
-      .run();
+    const res = await this.db
+      .update(enrollTokens)
+      .set({
+        remaining_uses: sqlDecrement(),
+        used_at: now,
+        last_machine_id: machineId,
+      })
+      .where(
+        and(
+          eq(enrollTokens.id, id),
+          gt(enrollTokens.remaining_uses, 0),
+          or(
+            isNull(enrollTokens.expires_at),
+            gt(enrollTokens.expires_at, now),
+          ),
+        ),
+      );
     return (res.meta.changes ?? 0) > 0;
   }
 
@@ -257,46 +215,35 @@ export class DB {
     enqueuedBy: string;
     github?: GithubContext;
   }): Promise<void> {
-    await this.d1
-      .prepare(
-        `INSERT INTO jobs
-           (id, machine_id, action, params_json, status, timeout_sec,
-            idempotent, created_at, enqueued_by,
-            gh_repo, gh_sha, gh_installation_id)
-         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        j.id,
-        j.machineId,
-        j.action,
-        j.paramsJson,
-        j.timeoutSec,
-        j.idempotent ? 1 : 0,
-        j.createdAt,
-        j.enqueuedBy,
-        j.github?.repo ?? null,
-        j.github?.sha ?? null,
-        j.github?.installationId ?? null,
-      )
-      .run();
+    await this.db.insert(jobs).values({
+      id: j.id,
+      machine_id: j.machineId,
+      action: j.action,
+      params_json: j.paramsJson,
+      status: "queued",
+      timeout_sec: j.timeoutSec,
+      idempotent: j.idempotent ? 1 : 0,
+      created_at: j.createdAt,
+      enqueued_by: j.enqueuedBy,
+      gh_repo: j.github?.repo ?? null,
+      gh_sha: j.github?.sha ?? null,
+      gh_installation_id: j.github?.installationId ?? null,
+    });
   }
 
   async getJob(id: string): Promise<JobRow | null> {
-    return await this.d1
-      .prepare(`SELECT * FROM jobs WHERE id = ?`)
-      .bind(id)
-      .first<JobRow>();
+    const row = await this.db.select().from(jobs).where(eq(jobs.id, id)).get();
+    return row ?? null;
   }
 
   async listJobsForMachine(machineId: string, limit = 100): Promise<JobRow[]> {
-    const res = await this.d1
-      .prepare(
-        `SELECT * FROM jobs WHERE machine_id = ?
-          ORDER BY created_at DESC LIMIT ?`,
-      )
-      .bind(machineId, limit)
-      .all<JobRow>();
-    return res.results ?? [];
+    return await this.db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.machine_id, machineId))
+      .orderBy(desc(jobs.created_at))
+      .limit(limit)
+      .all();
   }
 
   async setJobStatus(
@@ -309,47 +256,37 @@ export class DB {
       finishedAt?: number;
     } = {},
   ): Promise<void> {
-    await this.d1
-      .prepare(
-        `UPDATE jobs
-            SET status = ?,
-                exit_code = COALESCE(?, exit_code),
-                error = COALESCE(?, error),
-                dispatched_at = COALESCE(?, dispatched_at),
-                finished_at = COALESCE(?, finished_at)
-          WHERE id = ?`,
-      )
-      .bind(
+    // Only provided fields are written (COALESCE semantics): a null/undefined
+    // leaves the existing value untouched.
+    await this.db
+      .update(jobs)
+      .set({
         status,
-        fields.exitCode ?? null,
-        fields.error ?? null,
-        fields.dispatchedAt ?? null,
-        fields.finishedAt ?? null,
-        id,
-      )
-      .run();
+        ...(fields.exitCode != null ? { exit_code: fields.exitCode } : {}),
+        ...(fields.error != null ? { error: fields.error } : {}),
+        ...(fields.dispatchedAt != null
+          ? { dispatched_at: fields.dispatchedAt }
+          : {}),
+        ...(fields.finishedAt != null
+          ? { finished_at: fields.finishedAt }
+          : {}),
+      })
+      .where(eq(jobs.id, id));
   }
 
   // --- job logs --------------------------------------------------------------
 
   async appendLog(log: JobLogRow): Promise<void> {
-    await this.d1
-      .prepare(
-        `INSERT OR IGNORE INTO job_logs (job_id, seq, stream, chunk, ts)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .bind(log.job_id, log.seq, log.stream, log.chunk, log.ts)
-      .run();
+    await this.db.insert(jobLogs).values(log).onConflictDoNothing();
   }
 
   async getLogs(jobId: string): Promise<JobLogRow[]> {
-    const res = await this.d1
-      .prepare(
-        `SELECT * FROM job_logs WHERE job_id = ? ORDER BY ts ASC, seq ASC`,
-      )
-      .bind(jobId)
-      .all<JobLogRow>();
-    return res.results ?? [];
+    return await this.db
+      .select()
+      .from(jobLogs)
+      .where(eq(jobLogs.job_id, jobId))
+      .orderBy(asc(jobLogs.ts), asc(jobLogs.seq))
+      .all();
   }
 
   // --- repo bindings (GitHub triggers) --------------------------------------
@@ -363,49 +300,43 @@ export class DB {
     paramsJson: string;
     createdAt: number;
   }): Promise<void> {
-    await this.d1
-      .prepare(
-        `INSERT INTO repo_bindings
-           (id, repo_full_name, branch, machine_id, action, params_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        b.id,
-        b.repoFullName,
-        b.branch,
-        b.machineId,
-        b.action,
-        b.paramsJson,
-        b.createdAt,
-      )
-      .run();
+    await this.db.insert(repoBindings).values({
+      id: b.id,
+      repo_full_name: b.repoFullName,
+      branch: b.branch,
+      machine_id: b.machineId,
+      action: b.action,
+      params_json: b.paramsJson,
+      created_at: b.createdAt,
+    });
   }
 
   async listBindings(): Promise<RepoBindingRow[]> {
-    const res = await this.d1
-      .prepare(`SELECT * FROM repo_bindings ORDER BY created_at DESC`)
-      .all<RepoBindingRow>();
-    return res.results ?? [];
+    return await this.db
+      .select()
+      .from(repoBindings)
+      .orderBy(desc(repoBindings.created_at))
+      .all();
   }
 
   async findBindings(
     repoFullName: string,
     branch: string,
   ): Promise<RepoBindingRow[]> {
-    const res = await this.d1
-      .prepare(
-        `SELECT * FROM repo_bindings WHERE repo_full_name = ? AND branch = ?`,
+    return await this.db
+      .select()
+      .from(repoBindings)
+      .where(
+        and(
+          eq(repoBindings.repo_full_name, repoFullName),
+          eq(repoBindings.branch, branch),
+        ),
       )
-      .bind(repoFullName, branch)
-      .all<RepoBindingRow>();
-    return res.results ?? [];
+      .all();
   }
 
   async deleteBinding(id: string): Promise<void> {
-    await this.d1
-      .prepare(`DELETE FROM repo_bindings WHERE id = ?`)
-      .bind(id)
-      .run();
+    await this.db.delete(repoBindings).where(eq(repoBindings.id, id));
   }
 
   // --- webhook deliveries ----------------------------------------------------
@@ -420,23 +351,16 @@ export class DB {
     result?: string;
     jobIds?: string[];
   }): Promise<void> {
-    await this.d1
-      .prepare(
-        `INSERT INTO webhook_deliveries
-           (ts, event, repo, branch, sha, matched, result, job_ids)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        d.ts,
-        d.event,
-        d.repo ?? null,
-        d.branch ?? null,
-        d.sha ?? null,
-        d.matched ?? 0,
-        d.result ?? null,
-        d.jobIds ? JSON.stringify(d.jobIds) : null,
-      )
-      .run();
+    await this.db.insert(webhookDeliveries).values({
+      ts: d.ts,
+      event: d.event,
+      repo: d.repo ?? null,
+      branch: d.branch ?? null,
+      sha: d.sha ?? null,
+      matched: d.matched ?? 0,
+      result: d.result ?? null,
+      job_ids: d.jobIds ? JSON.stringify(d.jobIds) : null,
+    });
   }
 
   /**
@@ -449,13 +373,10 @@ export class DB {
     provider: "github" | "bitbucket",
     ts: number,
   ): Promise<boolean> {
-    const res = await this.d1
-      .prepare(
-        `INSERT OR IGNORE INTO webhook_dedup (delivery_id, provider, ts)
-         VALUES (?, ?, ?)`,
-      )
-      .bind(deliveryId, provider, ts)
-      .run();
+    const res = await this.db
+      .insert(webhookDedup)
+      .values({ delivery_id: deliveryId, provider, ts })
+      .onConflictDoNothing();
     return (res.meta.changes ?? 0) > 0;
   }
 
@@ -472,11 +393,12 @@ export class DB {
   }
 
   async listDeliveries(limit = 50): Promise<WebhookDeliveryRow[]> {
-    const res = await this.d1
-      .prepare(`SELECT * FROM webhook_deliveries ORDER BY ts DESC LIMIT ?`)
-      .bind(limit)
-      .all<WebhookDeliveryRow>();
-    return res.results ?? [];
+    return await this.db
+      .select()
+      .from(webhookDeliveries)
+      .orderBy(desc(webhookDeliveries.ts))
+      .limit(limit)
+      .all();
   }
 
   // --- audit -----------------------------------------------------------------
@@ -488,18 +410,17 @@ export class DB {
     target?: string;
     detail?: unknown;
   }): Promise<void> {
-    await this.d1
-      .prepare(
-        `INSERT INTO audit_log (ts, actor, action, target, detail_json)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        entry.ts,
-        entry.actor,
-        entry.action,
-        entry.target ?? null,
-        entry.detail !== undefined ? JSON.stringify(entry.detail) : null,
-      )
-      .run();
+    await this.db.insert(auditLog).values({
+      ts: entry.ts,
+      actor: entry.actor,
+      action: entry.action,
+      target: entry.target ?? null,
+      detail_json: entry.detail !== undefined ? JSON.stringify(entry.detail) : null,
+    });
   }
+}
+
+// `remaining_uses = remaining_uses - 1` expressed for Drizzle's typed set().
+function sqlDecrement() {
+  return sql`${enrollTokens.remaining_uses} - 1`;
 }
