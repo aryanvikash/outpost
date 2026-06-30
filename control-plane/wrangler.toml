@@ -32,6 +32,9 @@ migrations_dir = "migrations"
 [vars]
 HEARTBEAT_SEC = "30"
 DEFAULT_JOB_TIMEOUT_SEC = "300"
+# Max age a job may sit queued before it is expired instead of dispatched — guards
+# against deploying a stale commit when an agent reconnects after a long outage.
+MAX_QUEUE_AGE_SEC = "3600"
 
 # For local dev you can set a throwaway admin token here; in production use
 # `wrangler secret put ADMIN_TOKEN` instead and remove it from [vars].

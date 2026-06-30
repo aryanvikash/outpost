@@ -13,6 +13,12 @@ export interface Env {
   ADMIN_UI_ORIGIN?: string;
   HEARTBEAT_SEC: string;
   DEFAULT_JOB_TIMEOUT_SEC: string;
+  /**
+   * Max age a job may sit queued before it is expired instead of dispatched.
+   * Guards against deploying a stale commit when the agent reconnects after a
+   * long outage. Default 3600s (1h).
+   */
+  MAX_QUEUE_AGE_SEC?: string;
 
   // --- GitHub App (Phase 6, optional) --------------------------------------
   /** Webhook secret used to verify X-Hub-Signature-256. */
@@ -53,4 +59,9 @@ export function heartbeatSec(env: Env): number {
 export function defaultJobTimeoutSec(env: Env): number {
   const n = Number(env.DEFAULT_JOB_TIMEOUT_SEC);
   return Number.isFinite(n) && n > 0 ? n : 300;
+}
+
+export function maxQueueAgeSec(env: Env): number {
+  const n = Number(env.MAX_QUEUE_AGE_SEC);
+  return Number.isFinite(n) && n > 0 ? n : 3600;
 }

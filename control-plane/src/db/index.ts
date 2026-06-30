@@ -439,6 +439,26 @@ export class DB {
       .run();
   }
 
+  /**
+   * Record a webhook delivery id for de-duplication. Returns true if the id was
+   * newly seen (process it), false if it was already recorded (a retry/redeliver
+   * — skip it). The PRIMARY KEY + INSERT OR IGNORE makes this race-safe.
+   */
+  async markDeliverySeen(
+    deliveryId: string,
+    provider: "github" | "bitbucket",
+    ts: number,
+  ): Promise<boolean> {
+    const res = await this.d1
+      .prepare(
+        `INSERT OR IGNORE INTO webhook_dedup (delivery_id, provider, ts)
+         VALUES (?, ?, ?)`,
+      )
+      .bind(deliveryId, provider, ts)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
   async listDeliveries(limit = 50): Promise<WebhookDeliveryRow[]> {
     const res = await this.d1
       .prepare(`SELECT * FROM webhook_deliveries ORDER BY ts DESC LIMIT ?`)
