@@ -408,6 +408,7 @@ admin.get("/webhooks/deliveries", async (c) => {
       id: d.id,
       ts: d.ts,
       event: d.event,
+      provider: d.provider,
       repo: d.repo,
       branch: d.branch,
       sha: d.sha,

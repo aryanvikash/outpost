@@ -204,8 +204,10 @@ describe("bitbucket push → deploy binding", () => {
     await deliver("repo:push", pushBody("acme/bad-bb", "main"), "sha256=deadbeef");
     const res = await SELF.fetch(adminReq("/api/webhooks/deliveries"));
     const { deliveries } = (await res.json()) as {
-      deliveries: Array<{ result: string }>;
+      deliveries: Array<{ result: string; provider: string }>;
     };
-    expect(deliveries.some((d) => d.result === "invalid signature")).toBe(true);
+    const d = deliveries.find((x) => x.result === "invalid signature");
+    expect(d).toBeTruthy();
+    expect(d?.provider).toBe("bitbucket");
   });
 });

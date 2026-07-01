@@ -127,6 +127,7 @@ export const webhookDeliveries = sqliteTable(
     matched: integer("matched").notNull().default(0),
     result: text("result"),
     job_ids: text("job_ids"),
+    provider: text("provider"),
   },
   (t) => ({
     ts: index("idx_webhook_deliveries_ts").on(t.ts),

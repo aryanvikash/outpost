@@ -344,6 +344,7 @@ export class DB {
   async recordDelivery(d: {
     ts: number;
     event: string;
+    provider?: "github" | "bitbucket";
     repo?: string | null;
     branch?: string | null;
     sha?: string | null;
@@ -354,6 +355,7 @@ export class DB {
     await this.db.insert(webhookDeliveries).values({
       ts: d.ts,
       event: d.event,
+      provider: d.provider ?? null,
       repo: d.repo ?? null,
       branch: d.branch ?? null,
       sha: d.sha ?? null,

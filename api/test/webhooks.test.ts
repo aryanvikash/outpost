@@ -240,11 +240,12 @@ describe("github push → deploy binding", () => {
     const res = await SELF.fetch(adminReq("/api/webhooks/deliveries"));
     expect(res.status).toBe(200);
     const { deliveries } = (await res.json()) as {
-      deliveries: Array<{ repo: string; result: string; jobIds: string[] }>;
+      deliveries: Array<{ repo: string; result: string; jobIds: string[]; provider: string }>;
     };
     const d = deliveries.find((x) => x.repo === "acme/deliv");
     expect(d).toBeTruthy();
     expect(d?.result).toBe("enqueued 1");
     expect(d?.jobIds).toHaveLength(1);
+    expect(d?.provider).toBe("github");
   });
 });

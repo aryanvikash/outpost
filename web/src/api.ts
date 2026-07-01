@@ -202,6 +202,7 @@ export interface Delivery {
   id: number;
   ts: number;
   event: string;
+  provider: "github" | "bitbucket" | null;
   repo: string | null;
   branch: string | null;
   sha: string | null;

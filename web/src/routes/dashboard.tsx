@@ -74,7 +74,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight">Fleet</h1>
+        <h1 className="text-xl font-bold tracking-tight">Machines</h1>
         <div className="flex gap-2.5">
           <Stat label="machines" value={visible.length} />
           <Stat label="online" value={online} live />

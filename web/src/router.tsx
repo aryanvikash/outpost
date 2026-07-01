@@ -1,83 +1,50 @@
-import type { ReactNode } from "react";
 import {
   createRootRoute,
   createRoute,
   createRouter,
   redirect,
   Outlet,
-  Link,
 } from "@tanstack/react-router";
-import { Tent, LogOut } from "lucide-react";
-import { getToken, clearToken, apiBase } from "./api";
-import { Button } from "@/components/ui/button";
+import { getToken, apiBase } from "./api";
+import { AppSidebar } from "@/components/app-sidebar";
+import { Separator } from "@/components/ui/separator";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { LoginPage } from "./routes/login";
 import { DashboardPage } from "./routes/dashboard";
 import { JobPage } from "./routes/job";
-import { GitHubPage } from "./routes/github";
-import { BitbucketPage } from "./routes/bitbucket";
+import { ConnectionsPage } from "./routes/connections";
+import { WebhookLogPage } from "./routes/webhook-log";
+import { SettingsPage } from "./routes/settings";
 
 function requireAuth() {
   if (!getToken()) throw redirect({ to: "/login" });
 }
 
-function NavLink({ to, children }: { to: string; children: ReactNode }) {
+function AppLayout() {
   return (
-    <Link
-      to={to}
-      className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-      activeProps={{ className: "rounded-md px-3 py-1.5 text-sm font-medium text-foreground bg-accent" }}
-      activeOptions={{ exact: to === "/" }}
-    >
-      {children}
-    </Link>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="h-5" />
+          <span className="ml-auto hidden max-w-[320px] truncate rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground sm:block">
+            {apiBase() || "API URL not set"}
+          </span>
+        </header>
+        <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+          <Outlet />
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 
 const rootRoute = createRootRoute({
   component: () => {
     const authed = !!getToken();
-    return (
-      <div className="mx-auto max-w-6xl px-6 pb-20">
-        <header className="flex items-center justify-between border-b border-border/60 py-5">
-          <Link to="/" className="flex items-center gap-3">
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-violet-500 text-lg shadow-lg shadow-primary/30">
-              <Tent className="h-[18px] w-[18px] text-white" />
-            </span>
-            <span className="leading-tight">
-              <span className="block text-[17px] font-bold tracking-tight">Outpost</span>
-              <span className="block text-xs text-muted-foreground/70">API</span>
-            </span>
-          </Link>
-          {authed && (
-            <nav className="ml-8 flex items-center gap-1">
-              <NavLink to="/">Fleet</NavLink>
-              <NavLink to="/github">GitHub</NavLink>
-              <NavLink to="/bitbucket">Bitbucket</NavLink>
-            </nav>
-          )}
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden max-w-[320px] truncate rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground sm:block">
-              {apiBase() || "API URL not set"}
-            </span>
-            {authed && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  clearToken();
-                  window.location.href = "/login";
-                }}
-              >
-                <LogOut /> Sign out
-              </Button>
-            )}
-          </div>
-        </header>
-        <main className="pt-8">
-          <Outlet />
-        </main>
-      </div>
-    );
+    if (!authed) return <Outlet />;
+    return <AppLayout />;
   },
 });
 
@@ -104,26 +71,34 @@ const jobRoute = createRoute({
   component: JobPage,
 });
 
-const githubRoute = createRoute({
+const connectionsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/github",
+  path: "/connections",
   beforeLoad: requireAuth,
-  component: GitHubPage,
+  component: ConnectionsPage,
 });
 
-const bitbucketRoute = createRoute({
+const webhookLogRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/bitbucket",
+  path: "/webhooks",
   beforeLoad: requireAuth,
-  component: BitbucketPage,
+  component: WebhookLogPage,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  beforeLoad: requireAuth,
+  component: SettingsPage,
 });
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
   dashboardRoute,
   jobRoute,
-  githubRoute,
-  bitbucketRoute,
+  connectionsRoute,
+  webhookLogRoute,
+  settingsRoute,
 ]);
 
 export const router = createRouter({ routeTree });

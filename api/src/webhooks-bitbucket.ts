@@ -35,7 +35,7 @@ webhooksBitbucket.post("/bitbucket", async (c) => {
 
   const secret = c.env.BITBUCKET_WEBHOOK_SECRET;
   if (!secret) {
-    await db.recordDelivery({ ts: now, event, result: "webhooks not configured" });
+    await db.recordDelivery({ ts: now, provider: "bitbucket", event, result: "webhooks not configured" });
     return c.json({ error: "webhooks not configured" }, 503);
   }
 
@@ -47,7 +47,7 @@ webhooksBitbucket.post("/bitbucket", async (c) => {
     c.req.header("X-Hub-Signature") ?? null,
   );
   if (!ok) {
-    await db.recordDelivery({ ts: now, event, result: "invalid signature" });
+    await db.recordDelivery({ ts: now, provider: "bitbucket", event, result: "invalid signature" });
     return c.json({ error: "invalid signature" }, 401);
   }
 
@@ -55,17 +55,17 @@ webhooksBitbucket.post("/bitbucket", async (c) => {
   // delivery (reused on resend).
   const deliveryId = c.req.header("X-Request-UUID");
   if (deliveryId && !(await db.markDeliverySeen(deliveryId, "bitbucket", now))) {
-    await db.recordDelivery({ ts: now, event, result: "duplicate" });
+    await db.recordDelivery({ ts: now, provider: "bitbucket", event, result: "duplicate" });
     return c.json({ ok: true, duplicate: true });
   }
 
   // Bitbucket's "test connection" button sends diagnostics:ping.
   if (event === "diagnostics:ping") {
-    await db.recordDelivery({ ts: now, event, result: "ping" });
+    await db.recordDelivery({ ts: now, provider: "bitbucket", event, result: "ping" });
     return c.json({ ok: true, pong: true });
   }
   if (event !== "repo:push") {
-    await db.recordDelivery({ ts: now, event, result: "ignored" });
+    await db.recordDelivery({ ts: now, provider: "bitbucket", event, result: "ignored" });
     return c.json({ ok: true, ignored: event });
   }
 
@@ -81,9 +81,7 @@ webhooksBitbucket.post("/bitbucket", async (c) => {
 
   const changes = parseBitbucketPush(payload);
   if (changes.length === 0) {
-    await db.recordDelivery({
-      ts: now,
-      event,
+    await db.recordDelivery({ ts: now, provider: "bitbucket", event,
       repo,
       result: "ignored: no branch changes",
     });
@@ -125,9 +123,7 @@ webhooksBitbucket.post("/bitbucket", async (c) => {
       }
     }
 
-    await db.recordDelivery({
-      ts: now,
-      event,
+    await db.recordDelivery({ ts: now, provider: "bitbucket", event,
       repo,
       branch: lastBranch,
       sha: lastSha,

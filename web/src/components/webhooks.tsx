@@ -1,7 +1,7 @@
-// Shared, provider-neutral webhook UI: copy button, repository bindings, and the
-// recent-deliveries feed. Used by both the GitHub and Bitbucket pages — bindings
-// and deliveries are not provider-specific (one binding is matched by whichever
-// provider's push arrives; the feed lists all deliveries).
+// Shared webhook UI: copy button, repository bindings, and the deliveries feed.
+// BindingsCard lives on the Connections page (bindings are provider-neutral — one
+// binding is matched by whichever provider's push arrives). DeliveriesCard is the
+// Webhook log page: a single global feed, each row badged with its provider.
 
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Inbox,
   FolderGit2,
+  Github,
 } from "lucide-react";
 import {
   listBindings,
@@ -58,6 +59,22 @@ export function CopyButton({ value }: { value: string }) {
   );
 }
 
+function ProviderPill({ provider }: { provider: "github" | "bitbucket" | null }) {
+  if (provider === "github")
+    return (
+      <span className="flex w-[74px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <Github className="h-3.5 w-3.5" /> GitHub
+      </span>
+    );
+  if (provider === "bitbucket")
+    return (
+      <span className="flex w-[74px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <FolderGit2 className="h-3.5 w-3.5" /> Bitbkt
+      </span>
+    );
+  return <span className="w-[74px] shrink-0 text-xs text-muted-foreground/50">—</span>;
+}
+
 export function DeliveriesCard() {
   const deliveries = useQuery({
     queryKey: ["deliveries"],
@@ -84,6 +101,7 @@ export function DeliveriesCard() {
         <div className="divide-y divide-border/60">
           {deliveries.data?.map((d) => (
             <div key={d.id} className="flex items-center gap-3 py-2.5">
+              <ProviderPill provider={d.provider} />
               <Badge variant="outline" className="font-mono">
                 {d.event}
               </Badge>

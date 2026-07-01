@@ -4,26 +4,37 @@
 
 @layer base {
   :root {
-    --background: 240 12% 4%;
-    --foreground: 0 0% 96%;
-    --card: 240 9% 7%;
-    --card-foreground: 0 0% 96%;
-    --popover: 240 10% 6%;
-    --popover-foreground: 0 0% 96%;
+    --background: 240 14% 5%;
+    --foreground: 220 20% 97%;
+    --card: 240 11% 8%;
+    --card-foreground: 220 20% 97%;
+    --popover: 240 14% 7%;
+    --popover-foreground: 220 20% 97%;
     --primary: 245 84% 68%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 6% 13%;
-    --secondary-foreground: 0 0% 96%;
-    --muted: 240 6% 13%;
-    --muted-foreground: 240 6% 64%;
-    --accent: 240 6% 15%;
+    --secondary: 240 8% 14%;
+    --secondary-foreground: 220 20% 97%;
+    --muted: 240 8% 14%;
+    --muted-foreground: 240 8% 66%;
+    --accent: 240 9% 17%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84% 64%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 15%;
-    --input: 240 6% 16%;
+    --border: 240 8% 16%;
+    --input: 240 8% 17%;
     --ring: 245 84% 68%;
-    --radius: 0.7rem;
+    --radius: 0.85rem;
+
+    /* Sidebar gets its own, slightly darker plane than the page background so it
+       reads as a distinct panel (à la Linear/Vercel) rather than blending in. */
+    --sidebar-background: 240 16% 3.5%;
+    --sidebar-foreground: 220 14% 92%;
+    --sidebar-primary: 245 84% 68%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 9% 13%;
+    --sidebar-accent-foreground: 220 20% 97%;
+    --sidebar-border: 240 10% 13%;
+    --sidebar-ring: 245 84% 68%;
   }
 }
 
@@ -39,5 +50,23 @@
       radial-gradient(1100px 600px at 82% -12%, hsl(245 84% 68% / 0.10), transparent 60%),
       radial-gradient(900px 520px at -8% -5%, hsl(265 80% 66% / 0.08), transparent 55%);
     background-attachment: fixed;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+    background-clip: content-box;
   }
 }

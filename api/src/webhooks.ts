@@ -31,7 +31,7 @@ webhooks.post("/github", async (c) => {
 
   const secret = c.env.GITHUB_WEBHOOK_SECRET;
   if (!secret) {
-    await db.recordDelivery({ ts: now, event, result: "webhooks not configured" });
+    await db.recordDelivery({ ts: now, provider: "github", event, result: "webhooks not configured" });
     return c.json({ error: "webhooks not configured" }, 503);
   }
 
@@ -45,23 +45,23 @@ webhooks.post("/github", async (c) => {
   if (!ok) {
     // Log so a misconfigured secret is visible in the deliveries feed. Body is
     // unverified, so we record only the (untrusted) event label, nothing parsed.
-    await db.recordDelivery({ ts: now, event, result: "invalid signature" });
+    await db.recordDelivery({ ts: now, provider: "github", event, result: "invalid signature" });
     return c.json({ error: "invalid signature" }, 401);
   }
 
   // De-dup retries/redeliveries: GitHub reuses X-GitHub-Delivery on resend.
   const deliveryId = c.req.header("X-GitHub-Delivery");
   if (deliveryId && !(await db.markDeliverySeen(deliveryId, "github", now))) {
-    await db.recordDelivery({ ts: now, event, result: "duplicate" });
+    await db.recordDelivery({ ts: now, provider: "github", event, result: "duplicate" });
     return c.json({ ok: true, duplicate: true });
   }
 
   if (event === "ping") {
-    await db.recordDelivery({ ts: now, event: "ping", result: "ping" });
+    await db.recordDelivery({ ts: now, provider: "github", event: "ping", result: "ping" });
     return c.json({ ok: true, pong: true });
   }
   if (event !== "push") {
-    await db.recordDelivery({ ts: now, event, result: "ignored" });
+    await db.recordDelivery({ ts: now, provider: "github", event, result: "ignored" });
     return c.json({ ok: true, ignored: event });
   }
 
@@ -78,12 +78,12 @@ webhooks.post("/github", async (c) => {
   const installationId = payload.installation?.id;
 
   if (!ref.startsWith("refs/heads/")) {
-    await db.recordDelivery({ ts: now, event: "push", repo, sha, result: "ignored: non-branch ref" });
+    await db.recordDelivery({ ts: now, provider: "github", event: "push", repo, sha, result: "ignored: non-branch ref" });
     return c.json({ ok: true, ignored: "non-branch ref" });
   }
   const branch = ref.slice("refs/heads/".length);
   if (payload.deleted) {
-    await db.recordDelivery({ ts: now, event: "push", repo, branch, sha, result: "ignored: branch deleted" });
+    await db.recordDelivery({ ts: now, provider: "github", event: "push", repo, branch, sha, result: "ignored: branch deleted" });
     return c.json({ ok: true, ignored: "branch deleted" });
   }
   if (!repo) return c.json({ error: "missing repository" }, 400);
@@ -94,7 +94,7 @@ webhooks.post("/github", async (c) => {
   try {
     const bindings = await db.findBindings(repo, branch);
     if (bindings.length === 0) {
-      await db.recordDelivery({ ts: now, event: "push", repo, branch, sha, matched: 0, result: "no binding" });
+      await db.recordDelivery({ ts: now, provider: "github", event: "push", repo, branch, sha, matched: 0, result: "no binding" });
       return c.json({ ok: true, matched: 0, message: "no binding for repo/branch" });
     }
 
@@ -126,9 +126,7 @@ webhooks.post("/github", async (c) => {
       }
     }
 
-    await db.recordDelivery({
-      ts: now,
-      event: "push",
+    await db.recordDelivery({ ts: now, provider: "github", event: "push",
       repo,
       branch,
       sha,
