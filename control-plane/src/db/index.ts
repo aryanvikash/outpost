@@ -459,6 +459,18 @@ export class DB {
     return (res.meta.changes ?? 0) > 0;
   }
 
+  /**
+   * Release a previously-claimed delivery id (see markDeliverySeen) so a retry
+   * can reprocess it. Called when processing fails after the id was claimed, so
+   * a transient error doesn't permanently dedup the push away.
+   */
+  async forgetDelivery(deliveryId: string): Promise<void> {
+    await this.d1
+      .prepare(`DELETE FROM webhook_dedup WHERE delivery_id = ?`)
+      .bind(deliveryId)
+      .run();
+  }
+
   async listDeliveries(limit = 50): Promise<WebhookDeliveryRow[]> {
     const res = await this.d1
       .prepare(`SELECT * FROM webhook_deliveries ORDER BY ts DESC LIMIT ?`)
