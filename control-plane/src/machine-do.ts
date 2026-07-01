@@ -406,9 +406,9 @@ export class MachineDO extends DurableObject<Env> {
     }
   }
 
-  override async webSocketClose(ws: WebSocket): Promise<void> {
+  override async webSocketClose(ws: WebSocket, code: number): Promise<void> {
     // A viewer leaving must not affect machine/job state.
-    if (att(ws)?.role === "agent") await this.handleDisconnect();
+    if (att(ws)?.role === "agent") await this.handleDisconnect(code);
     try {
       ws.close();
     } catch {
@@ -417,6 +417,7 @@ export class MachineDO extends DurableObject<Env> {
   }
 
   override async webSocketError(ws: WebSocket): Promise<void> {
+    // An error is a genuine failure (no intentional close code).
     if (att(ws)?.role === "agent") await this.handleDisconnect();
   }
 
@@ -528,35 +529,39 @@ export class MachineDO extends DurableObject<Env> {
       .where(eq(queue.job_id, jobId))
       .all();
 
-    this.q.delete(queue).where(eq(queue.job_id, jobId)).run();
-    await this.db.setJobStatus(jobId, status, {
-      exitCode,
-      error,
-      finishedAt: now,
-    });
-
+    // If the row is already gone, this job was terminalized out from under us
+    // (revoke → canceled, or superseded/expired). A late result must NOT
+    // overwrite that terminal status, so only record the outcome when the job
+    // was still ours. The slot is freed + viewers notified either way.
     if (rows.length > 0) {
+      this.q.delete(queue).where(eq(queue.job_id, jobId)).run();
+      await this.db.setJobStatus(jobId, status, {
+        exitCode,
+        error,
+        finishedAt: now,
+      });
+
       const ghState = exitCode === 0 ? "success" : "failure";
       this.postCommitStatus(
         rows[0],
         ghState,
         exitCode === 0 ? "deploy succeeded" : `deploy ${status} (exit ${exitCode})`,
       );
-    }
 
-    // Alert on a genuine failure (not a clean success or a user-initiated cancel).
-    if (status === "failed" || status === "timed_out") {
-      const machineId = await this.getMachineId();
-      if (machineId) {
-        this.notify({
-          type: "job_failed",
-          machineId,
-          jobId,
-          action: rows[0]?.action,
-          status,
-          ts: now,
-          detail: error ?? `exit ${exitCode}`,
-        });
+      // Alert on a genuine failure (not a clean success or user-initiated cancel).
+      if (status === "failed" || status === "timed_out") {
+        const machineId = await this.getMachineId();
+        if (machineId) {
+          this.notify({
+            type: "job_failed",
+            machineId,
+            jobId,
+            action: rows[0].action,
+            status,
+            ts: now,
+            detail: error ?? `exit ${exitCode}`,
+          });
+        }
       }
     }
 
@@ -630,9 +635,16 @@ export class MachineDO extends DurableObject<Env> {
    * (deploy/run-hook) is retried up to MAX_JOB_RETRIES, then given up as
    * interrupted with an alert. Per PROTOCOL.md §6.
    */
-  private async handleDisconnect(): Promise<void> {
+  private async handleDisconnect(closeCode?: number): Promise<void> {
     const machineId = await this.getMachineId();
     if (!machineId) return;
+
+    // Intentional internal closes don't mean the machine went offline: 4002
+    // replaces this socket with a newer connection (still online), and 4003 is a
+    // revoke that already marked it offline and cancelled its jobs. In those
+    // cases we still reconcile any orphaned in-flight job below, but must not
+    // mark offline or fire a machine_offline alert.
+    const replacedOrRevoked = closeCode === 4002 || closeCode === 4003;
 
     const inFlight = this.q
       .select()
@@ -672,13 +684,15 @@ export class MachineDO extends DurableObject<Env> {
       }
     }
 
-    await this.markOfflineAndAlert(machineId, now, "agent disconnected");
-    await this.db.audit({
-      ts: now,
-      actor: `agent:${machineId}`,
-      action: "disconnect",
-      target: machineId,
-    });
+    if (!replacedOrRevoked) {
+      await this.markOfflineAndAlert(machineId, now, "agent disconnected");
+      await this.db.audit({
+        ts: now,
+        actor: `agent:${machineId}`,
+        action: "disconnect",
+        target: machineId,
+      });
+    }
   }
 
   /** The agent's socket (there is at most one), ignoring browser viewers. */
