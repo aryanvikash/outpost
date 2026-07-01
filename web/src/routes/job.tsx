@@ -7,7 +7,15 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const TERMINAL = new Set(["succeeded", "failed", "timed_out", "canceled", "interrupted"]);
+const TERMINAL = new Set([
+  "succeeded",
+  "failed",
+  "timed_out",
+  "canceled",
+  "interrupted",
+  "superseded",
+  "expired",
+]);
 
 function statusVariant(s: string): "success" | "danger" | "default" {
   if (s === "succeeded") return "success";

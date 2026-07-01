@@ -196,6 +196,36 @@ describe("github push → deploy binding", () => {
     expect(await status(j2)).toBe("queued");
   });
 
+  it("does not coalesce deploys for different repos on the same machine/branch", async () => {
+    const machineId = await enroll("multi-repo");
+    for (const repo of ["acme/repo-a", "acme/repo-b"]) {
+      await SELF.fetch(
+        adminReq("/api/bindings", {
+          method: "POST",
+          body: JSON.stringify({ repo, branch: "main", machineId }),
+        }),
+      );
+    }
+
+    // Both push to main while the agent is offline. Coalescing must key on repo,
+    // not branch alone — otherwise repo-b's deploy would supersede repo-a's.
+    const ba = pushBody("acme/repo-a", "main", "sha-a");
+    const ra = await deliver("push", ba, await sign(ba), "d-a");
+    const ja = ((await ra.json()) as { enqueued: Array<{ jobId: string }> }).enqueued[0].jobId;
+
+    const bb = pushBody("acme/repo-b", "main", "sha-b");
+    const rb = await deliver("push", bb, await sign(bb), "d-b");
+    const jb = ((await rb.json()) as { enqueued: Array<{ jobId: string }> }).enqueued[0].jobId;
+
+    const status = async (id: string) =>
+      ((await (await SELF.fetch(adminReq(`/api/jobs/${id}`))).json()) as { status: string })
+        .status;
+
+    // Both stay queued — neither repo's deploy is dropped.
+    expect(await status(ja)).toBe("queued");
+    expect(await status(jb)).toBe("queued");
+  });
+
   it("records deliveries for the admin view", async () => {
     const machineId = await enroll("web-deliv");
     await SELF.fetch(

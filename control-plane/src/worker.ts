@@ -13,6 +13,7 @@ import { cors } from "hono/cors";
 import type { Context, Next } from "hono";
 import type { Env } from "./env";
 import { signAdminJwt, verifyAdminJwt } from "./admin-auth";
+import { retentionDays, webhookDedupRetentionDays } from "./env";
 import { DB } from "./db/index";
 import {
   generateId,
@@ -296,8 +297,21 @@ admin.post("/machines/:id/revoke", async (c) => {
   if (!m) return c.json({ error: "not found" }, 404);
   const now = Date.now();
   await db.revokeMachine(id, now);
-  await db.audit({ ts: now, actor: adminActor(c), action: "revoke", target: id });
-  return c.json({ revoked: true });
+  // Sever any live connection and cancel pending jobs in the DO — a revoked
+  // agent must stop receiving work immediately, not just fail its next connect.
+  const res = await machineStub(c.env, id).fetch(
+    "https://machine-do.internal/disconnect",
+    { method: "POST" },
+  );
+  const { disconnected } = (await res.json()) as { disconnected: boolean };
+  await db.audit({
+    ts: now,
+    actor: adminActor(c),
+    action: "revoke",
+    target: id,
+    detail: { disconnected },
+  });
+  return c.json({ revoked: true, disconnected });
 });
 
 /** Enqueue a job for a machine. */
@@ -518,4 +532,26 @@ function clampInt(
   return Math.min(Math.max(Math.floor(v), min), max);
 }
 
-export default app;
+// ---------------------------------------------------------------------------
+// Scheduled (cron) handler: prune append-only history so D1 stays bounded.
+// Wired to a daily trigger in wrangler.toml.
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+
+async function pruneHistory(env: Env): Promise<void> {
+  const db = new DB(env.DB);
+  const now = Date.now();
+  const cutoff = now - retentionDays(env) * DAY_MS;
+  const dedupCutoff = now - webhookDedupRetentionDays(env) * DAY_MS;
+  const removed = await db.pruneOlderThan(cutoff, dedupCutoff);
+  console.log("retention prune", removed);
+}
+
+export default {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
+    app.fetch(request, env, ctx),
+  scheduled: (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(pruneHistory(env));
+  },
+} satisfies ExportedHandler<Env>;
