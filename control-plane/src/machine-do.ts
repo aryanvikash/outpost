@@ -13,10 +13,16 @@ import { DurableObject } from "cloudflare:workers";
 import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import type { Env } from "./env";
-import { heartbeatSec, githubAppConfigured, maxQueueAgeSec } from "./env";
+import {
+  heartbeatSec,
+  githubAppConfigured,
+  maxQueueAgeSec,
+  alertsConfigured,
+} from "./env";
 import { DB } from "./db/index";
 import { queue, type QueueRow } from "./db/queue-schema";
 import { setCommitStatus } from "./github-app";
+import { sendAlert, type AlertEvent } from "./notify";
 import {
   PROTOCOL_VERSION,
   parseAgentMessage,
@@ -84,6 +90,7 @@ export class MachineDO extends DurableObject<Env> {
     if (path === "/enqueue") return this.handleEnqueue(request);
     if (path === "/cancel") return this.handleCancel(request);
     if (path === "/status") return this.handleStatus();
+    if (path === "/disconnect") return this.handleRevokeDisconnect();
 
     return new Response("not found", { status: 404 });
   }
@@ -258,6 +265,40 @@ export class MachineDO extends DurableObject<Env> {
     return Response.json({ online, queue: queued });
   }
 
+  /**
+   * Sever a revoked machine: cancel every queued/in-flight job, purge the DO
+   * queue, mark the machine offline, and close the live agent socket. Called by
+   * the admin revoke route after it sets revoked_at, so a revoked agent stops
+   * receiving work immediately (its reconnect is then rejected at /connect).
+   */
+  private async handleRevokeDisconnect(): Promise<Response> {
+    const now = Date.now();
+    const machineId = await this.getMachineId();
+
+    // The DO queue is the source of truth for what's pending on this machine.
+    const rows = this.q.select().from(queue).all();
+    for (const job of rows) {
+      this.q.delete(queue).where(eq(queue.job_id, job.job_id)).run();
+      await this.db.setJobStatus(job.job_id, "canceled", {
+        finishedAt: now,
+        error: "machine revoked",
+      });
+    }
+
+    // Revocation is intentional, so mark offline directly (no offline alert).
+    if (machineId) await this.db.setMachineStatus(machineId, "offline", now);
+
+    const ws = this.agentSocket();
+    if (ws) {
+      try {
+        ws.close(4003, "revoked");
+      } catch {
+        /* already closed */
+      }
+    }
+    return Response.json({ disconnected: ws !== null, canceled: rows.length });
+  }
+
   // --- Hibernation WebSocket handlers ---------------------------------------
 
   override async webSocketMessage(
@@ -354,13 +395,13 @@ export class MachineDO extends DurableObject<Env> {
     const machineId = await this.getMachineId();
     if (!machineId) return;
     if (this.agentSocket() === null) {
-      await this.db.setMachineStatus(machineId, "offline", Date.now());
+      await this.markOfflineAndAlert(machineId, Date.now(), "no live connection");
       return;
     }
     const m = await this.db.getMachine(machineId);
     const threshold = heartbeatSec(this.env) * 2.5 * 1000;
     if (m?.last_seen && Date.now() - m.last_seen > threshold) {
-      await this.db.setMachineStatus(machineId, "offline", m.last_seen);
+      await this.markOfflineAndAlert(machineId, m.last_seen, "liveness timeout");
       // Half-open agent socket: drop it so the agent's reconnect loop takes over.
       try {
         this.agentSocket()?.close(1001, "liveness timeout");
@@ -473,6 +514,22 @@ export class MachineDO extends DurableObject<Env> {
       );
     }
 
+    // Alert on a genuine failure (not a clean success or a user-initiated cancel).
+    if (status === "failed" || status === "timed_out") {
+      const machineId = await this.getMachineId();
+      if (machineId) {
+        this.notify({
+          type: "job_failed",
+          machineId,
+          jobId,
+          action: rows[0]?.action,
+          status,
+          ts: now,
+          detail: error ?? `exit ${exitCode}`,
+        });
+      }
+    }
+
     // Tell live-tail viewers the job finished so they can stop the stream.
     this.fanOut(jobId, { type: "end", jobId, exitCode });
 
@@ -512,6 +569,30 @@ export class MachineDO extends DurableObject<Env> {
     );
   }
 
+  /** Fire an operational alert (best-effort, non-blocking). */
+  private notify(event: AlertEvent): void {
+    if (!alertsConfigured(this.env)) return;
+    this.ctx.waitUntil(sendAlert(this.env, event));
+  }
+
+  /**
+   * Mark the machine offline, alerting only on a genuine online → offline
+   * transition so a redundant offline write (e.g. a late liveness alarm after a
+   * clean disconnect) doesn't double-fire the alert.
+   */
+  private async markOfflineAndAlert(
+    machineId: string,
+    ts: number,
+    reason: string,
+  ): Promise<void> {
+    const m = await this.db.getMachine(machineId);
+    const wasOnline = m?.status === "online";
+    await this.db.setMachineStatus(machineId, "offline", ts);
+    if (wasOnline) {
+      this.notify({ type: "machine_offline", machineId, ts, detail: reason });
+    }
+  }
+
   /**
    * Connection lost. Mark offline. Any job that was dispatched/running but never
    * returned a result is INTERRUPTED. Per PROTOCOL.md §6 it is not silently
@@ -544,10 +625,19 @@ export class MachineDO extends DurableObject<Env> {
           finishedAt: now,
           error: "connection lost before result",
         });
+        this.notify({
+          type: "job_failed",
+          machineId,
+          jobId: job.job_id,
+          action: job.action,
+          status: "interrupted",
+          ts: now,
+          detail: "connection lost before result",
+        });
       }
     }
 
-    await this.db.setMachineStatus(machineId, "offline", now);
+    await this.markOfflineAndAlert(machineId, now, "agent disconnected");
     await this.db.audit({
       ts: now,
       actor: `agent:${machineId}`,

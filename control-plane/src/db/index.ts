@@ -3,7 +3,7 @@
 // which is type-checked against the real columns; the hand-written SQL in
 // ./migrations remains the source of truth for the DDL.
 
-import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
@@ -398,6 +398,47 @@ export class DB {
       .orderBy(desc(webhookDeliveries.ts))
       .limit(limit)
       .all();
+  }
+
+  // --- retention pruning -----------------------------------------------------
+
+  /**
+   * Delete history older than the cutoffs, keeping D1 bounded. Append-only
+   * tables (job_logs, audit_log, webhook_deliveries) prune by their timestamp;
+   * jobs prune only once finished (never mid-flight); the dedup table uses a
+   * shorter window since it only needs to outlive a provider's retry window.
+   * job_logs are deleted before jobs to respect the FK. Returns per-table
+   * delete counts for observability. `cutoffMs`/`dedupCutoffMs` are unix-ms
+   * lower bounds — rows with a timestamp strictly below them are removed.
+   */
+  async pruneOlderThan(
+    cutoffMs: number,
+    dedupCutoffMs: number,
+  ): Promise<{
+    jobLogs: number;
+    jobs: number;
+    auditLog: number;
+    webhookDeliveries: number;
+    webhookDedup: number;
+  }> {
+    const logs = await this.db.delete(jobLogs).where(lt(jobLogs.ts, cutoffMs));
+    const finished = await this.db
+      .delete(jobs)
+      .where(and(isNotNull(jobs.finished_at), lt(jobs.finished_at, cutoffMs)));
+    const audit = await this.db.delete(auditLog).where(lt(auditLog.ts, cutoffMs));
+    const deliveries = await this.db
+      .delete(webhookDeliveries)
+      .where(lt(webhookDeliveries.ts, cutoffMs));
+    const dedup = await this.db
+      .delete(webhookDedup)
+      .where(lt(webhookDedup.ts, dedupCutoffMs));
+    return {
+      jobLogs: logs.meta.changes ?? 0,
+      jobs: finished.meta.changes ?? 0,
+      auditLog: audit.meta.changes ?? 0,
+      webhookDeliveries: deliveries.meta.changes ?? 0,
+      webhookDedup: dedup.meta.changes ?? 0,
+    };
   }
 
   // --- audit -----------------------------------------------------------------

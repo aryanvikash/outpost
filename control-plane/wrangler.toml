@@ -20,6 +20,13 @@ class_name = "MachineDO"
 tag = "v1"
 new_sqlite_classes = ["MachineDO"]
 
+# --- Scheduled retention prune -------------------------------------------------
+# Daily at 03:00 UTC: delete history older than RETENTION_DAYS (job rows, logs,
+# audit, webhook deliveries) and older than WEBHOOK_DEDUP_RETENTION_DAYS (dedup
+# ids), keeping D1 bounded. See the `scheduled` handler in src/worker.ts.
+[triggers]
+crons = ["0 3 * * *"]
+
 # --- D1: fleet-wide registry, job history, audit log --------------------------
 [[d1_databases]]
 binding = "DB"
@@ -35,6 +42,15 @@ DEFAULT_JOB_TIMEOUT_SEC = "300"
 # Max age a job may sit queued before it is expired instead of dispatched — guards
 # against deploying a stale commit when an agent reconnects after a long outage.
 MAX_QUEUE_AGE_SEC = "3600"
+# Retention windows (days) for the daily prune. History (jobs/logs/audit/deliveries)
+# is kept RETENTION_DAYS; dedup ids only need to outlive provider retries.
+RETENTION_DAYS = "30"
+WEBHOOK_DEDUP_RETENTION_DAYS = "7"
+
+# --- Alerting (optional) ------------------------------------------------------
+# Best-effort operational alerts (machine offline, job failed) POSTed as JSON.
+# Works with Slack/Discord/custom endpoints. Unset = disabled.
+# ALERT_WEBHOOK_URL = "https://hooks.slack.com/services/…"
 
 # For local dev you can set a throwaway admin token here; in production use
 # `wrangler secret put ADMIN_TOKEN` instead and remove it from [vars].
