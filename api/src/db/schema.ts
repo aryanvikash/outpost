@@ -160,3 +160,45 @@ export const auditLog = sqliteTable(
     ts: index("idx_audit_ts").on(t.ts),
   }),
 );
+
+export const triggers = sqliteTable(
+  "triggers",
+  {
+    id: text("id").primaryKey(),
+    token_hash: text("token_hash").notNull().unique(),
+    label: text("label"),
+    machine_id: text("machine_id")
+      .notNull()
+      .references(() => machines.id),
+    action: text("action").notNull(),
+    params_json: text("params_json").notNull().default("{}"),
+    created_by: text("created_by"),
+    created_at: integer("created_at").notNull(),
+    last_used_at: integer("last_used_at"),
+  },
+  (t) => ({
+    token: index("idx_triggers_token").on(t.token_hash),
+  }),
+);
+
+export const appConfig = sqliteTable("app_config", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+});
+
+export const alerts = sqliteTable(
+  "alerts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    ts: integer("ts").notNull(),
+    type: text("type").notNull(),
+    machine_id: text("machine_id"),
+    job_id: text("job_id"),
+    status: text("status"),
+    detail: text("detail"),
+    delivered: integer("delivered").notNull().default(0),
+  },
+  (t) => ({
+    ts: index("idx_alerts_ts").on(t.ts),
+  }),
+);

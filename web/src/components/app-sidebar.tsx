@@ -1,6 +1,15 @@
 import type { ComponentType } from "react";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
-import { Tent, Server, Cable, ScrollText, Settings, LogOut } from "lucide-react";
+import {
+  Tent,
+  Server,
+  Cable,
+  ScrollText,
+  Zap,
+  Bell,
+  Settings,
+  LogOut,
+} from "lucide-react";
 import { clearToken } from "../api";
 import {
   Sidebar,
@@ -16,10 +25,14 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 
-const PLATFORM_ITEMS = [{ to: "/", label: "Machines", icon: Server }];
+const PLATFORM_ITEMS = [
+  { to: "/", label: "Machines", icon: Server },
+  { to: "/alerts", label: "Alerts", icon: Bell },
+];
 
 const DEPLOY_ITEMS = [
   { to: "/connections", label: "Connections", icon: Cable },
+  { to: "/triggers", label: "Triggers", icon: Zap },
   { to: "/webhooks", label: "Webhook log", icon: ScrollText },
 ];
 

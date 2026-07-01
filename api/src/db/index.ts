@@ -15,6 +15,8 @@ export type JobRow = typeof schema.jobs.$inferSelect;
 export type RepoBindingRow = typeof schema.repoBindings.$inferSelect;
 export type WebhookDeliveryRow = typeof schema.webhookDeliveries.$inferSelect;
 export type JobLogRow = typeof schema.jobLogs.$inferSelect;
+export type TriggerRow = typeof schema.triggers.$inferSelect;
+export type AlertRow = typeof schema.alerts.$inferSelect;
 
 /** Optional GitHub context attached to a job for commit-status feedback. */
 export interface GithubContext {
@@ -32,6 +34,9 @@ const {
   webhookDeliveries,
   webhookDedup,
   auditLog,
+  triggers,
+  appConfig,
+  alerts,
 } = schema;
 
 export class DB {
@@ -344,7 +349,7 @@ export class DB {
   async recordDelivery(d: {
     ts: number;
     event: string;
-    provider?: "github" | "bitbucket";
+    provider?: "github" | "bitbucket" | "custom";
     repo?: string | null;
     branch?: string | null;
     sha?: string | null;
@@ -459,6 +464,112 @@ export class DB {
       target: entry.target ?? null,
       detail_json: entry.detail !== undefined ? JSON.stringify(entry.detail) : null,
     });
+  }
+
+  // --- trigger hooks ---------------------------------------------------------
+
+  async insertTrigger(t: {
+    id: string;
+    tokenHash: string;
+    label: string | null;
+    machineId: string;
+    action: string;
+    paramsJson: string;
+    createdBy: string;
+    createdAt: number;
+  }): Promise<void> {
+    await this.db.insert(triggers).values({
+      id: t.id,
+      token_hash: t.tokenHash,
+      label: t.label,
+      machine_id: t.machineId,
+      action: t.action,
+      params_json: t.paramsJson,
+      created_by: t.createdBy,
+      created_at: t.createdAt,
+    });
+  }
+
+  async listTriggers(): Promise<TriggerRow[]> {
+    return await this.db
+      .select()
+      .from(triggers)
+      .orderBy(desc(triggers.created_at))
+      .all();
+  }
+
+  async findTriggerByHash(hash: string): Promise<TriggerRow | null> {
+    const row = await this.db
+      .select()
+      .from(triggers)
+      .where(eq(triggers.token_hash, hash))
+      .get();
+    return row ?? null;
+  }
+
+  async touchTrigger(id: string, ts: number): Promise<void> {
+    await this.db
+      .update(triggers)
+      .set({ last_used_at: ts })
+      .where(eq(triggers.id, id));
+  }
+
+  async deleteTrigger(id: string): Promise<void> {
+    await this.db.delete(triggers).where(eq(triggers.id, id));
+  }
+
+  // --- app config ------------------------------------------------------------
+
+  async getConfig(key: string): Promise<string | null> {
+    const row = await this.db
+      .select()
+      .from(appConfig)
+      .where(eq(appConfig.key, key))
+      .get();
+    return row?.value ?? null;
+  }
+
+  async setConfig(key: string, value: string | null): Promise<void> {
+    await this.db
+      .insert(appConfig)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: appConfig.key, set: { value } });
+  }
+
+  // --- alerts ----------------------------------------------------------------
+
+  async insertAlert(a: {
+    ts: number;
+    type: string;
+    machineId?: string | null;
+    jobId?: string | null;
+    status?: string | null;
+    detail?: string | null;
+    delivered?: boolean;
+  }): Promise<number> {
+    const res = await this.db.insert(alerts).values({
+      ts: a.ts,
+      type: a.type,
+      machine_id: a.machineId ?? null,
+      job_id: a.jobId ?? null,
+      status: a.status ?? null,
+      detail: a.detail ?? null,
+      delivered: a.delivered ? 1 : 0,
+    });
+    return Number(res.meta.last_row_id ?? 0);
+  }
+
+  async markAlertDelivered(id: number): Promise<void> {
+    await this.db.update(alerts).set({ delivered: 1 }).where(eq(alerts.id, id));
+  }
+
+  async listAlerts(limit = 50): Promise<AlertRow[]> {
+    return await this.db
+      .select()
+      .from(alerts)
+      .orderBy(desc(alerts.ts))
+      .limit(limit)
+      .all();
   }
 }
 

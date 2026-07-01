@@ -17,6 +17,7 @@ import {
   Inbox,
   FolderGit2,
   Github,
+  Webhook,
 } from "lucide-react";
 import {
   listBindings,
@@ -27,6 +28,7 @@ import {
   type Machine,
 } from "../api";
 import { timeAgo } from "../util";
+import { cn } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,17 +61,28 @@ export function CopyButton({ value }: { value: string }) {
   );
 }
 
-function ProviderPill({ provider }: { provider: "github" | "bitbucket" | null }) {
+function ProviderPill({
+  provider,
+}: {
+  provider: "github" | "bitbucket" | "custom" | null;
+}) {
+  const base = "flex w-[74px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground";
   if (provider === "github")
     return (
-      <span className="flex w-[74px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <span className={base}>
         <Github className="h-3.5 w-3.5" /> GitHub
       </span>
     );
   if (provider === "bitbucket")
     return (
-      <span className="flex w-[74px] shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <span className={base}>
         <FolderGit2 className="h-3.5 w-3.5" /> Bitbkt
+      </span>
+    );
+  if (provider === "custom")
+    return (
+      <span className={base}>
+        <Webhook className="h-3.5 w-3.5 text-primary" /> Custom
       </span>
     );
   return <span className="w-[74px] shrink-0 text-xs text-muted-foreground/50">—</span>;

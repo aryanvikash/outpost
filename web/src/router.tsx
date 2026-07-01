@@ -14,6 +14,8 @@ import { DashboardPage } from "./routes/dashboard";
 import { JobPage } from "./routes/job";
 import { ConnectionsPage } from "./routes/connections";
 import { WebhookLogPage } from "./routes/webhook-log";
+import { TriggersPage } from "./routes/triggers";
+import { AlertsPage } from "./routes/alerts";
 import { SettingsPage } from "./routes/settings";
 
 function requireAuth() {
@@ -85,6 +87,20 @@ const webhookLogRoute = createRoute({
   component: WebhookLogPage,
 });
 
+const triggersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/triggers",
+  beforeLoad: requireAuth,
+  component: TriggersPage,
+});
+
+const alertsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/alerts",
+  beforeLoad: requireAuth,
+  component: AlertsPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
@@ -98,6 +114,8 @@ const routeTree = rootRoute.addChildren([
   jobRoute,
   connectionsRoute,
   webhookLogRoute,
+  triggersRoute,
+  alertsRoute,
   settingsRoute,
 ]);
 

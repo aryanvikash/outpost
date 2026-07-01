@@ -7,12 +7,10 @@ import {
   Check,
   Play,
   Trash2,
-  Server,
   ScrollText,
   Terminal,
   Pencil,
   Loader2,
-  RadioTower,
   AlertTriangle,
 } from "lucide-react";
 import {

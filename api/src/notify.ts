@@ -1,10 +1,8 @@
-// Operational alerting. Best-effort outgoing webhook fired on noteworthy events
-// (a machine going offline, a job failing/interrupting). Posts a compact JSON
-// payload to ALERT_WEBHOOK_URL — generic enough for Slack/Discord/custom
-// endpoints. Alerting must NEVER affect API behavior, so every send is
-// guarded and swallows its own errors.
-
-import type { Env } from "./env";
+// Operational alerting. Every noteworthy event (a machine going offline, a job
+// failing/interrupting) is recorded to D1 for the in-app feed, and — when a
+// destination is configured and the event type is enabled — POSTed to an
+// outbound webhook (Slack/Discord/custom). Alerting must NEVER affect API
+// behavior, so sends are best-effort and swallow their own errors.
 
 export interface AlertEvent {
   /** machine_offline: a machine transitioned online → offline unexpectedly. */
@@ -18,25 +16,44 @@ export interface AlertEvent {
   detail?: string;
 }
 
+export interface AlertEventToggles {
+  machine_offline: boolean;
+  job_failed: boolean;
+}
+
 /** Shape the payload sent to the alert webhook. Pure, so it's unit-testable. */
 export function buildAlert(event: AlertEvent): Record<string, unknown> {
   return { source: "outpost", ...event };
 }
 
-/**
- * POST an alert to ALERT_WEBHOOK_URL if configured. No-op when unset. Never
- * throws — failures are swallowed so alerting can't break job execution.
- */
-export async function sendAlert(env: Env, event: AlertEvent): Promise<void> {
-  const url = env.ALERT_WEBHOOK_URL;
-  if (!url) return;
+/** Parse the stored alert_events JSON; both event types default to enabled. */
+export function alertEventsFromConfig(json: string | null): AlertEventToggles {
   try {
-    await fetch(url, {
+    const v = json ? (JSON.parse(json) as Record<string, unknown>) : {};
+    return {
+      machine_offline: v.machine_offline !== false,
+      job_failed: v.job_failed !== false,
+    };
+  } catch {
+    return { machine_offline: true, job_failed: true };
+  }
+}
+
+/**
+ * POST an alert to the given URL. Returns true if delivered (2xx). No-op → false
+ * when the URL is empty. Never throws — failures are swallowed so alerting can't
+ * break job execution.
+ */
+export async function sendAlert(url: string, event: AlertEvent): Promise<boolean> {
+  if (!url) return false;
+  try {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildAlert(event)),
     });
+    return res.ok;
   } catch {
-    /* best-effort */
+    return false;
   }
 }

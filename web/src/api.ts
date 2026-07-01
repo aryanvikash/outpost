@@ -202,7 +202,7 @@ export interface Delivery {
   id: number;
   ts: number;
   event: string;
-  provider: "github" | "bitbucket" | null;
+  provider: "github" | "bitbucket" | "custom" | null;
   repo: string | null;
   branch: string | null;
   sha: string | null;
@@ -216,6 +216,67 @@ export async function listDeliveries(): Promise<Delivery[]> {
     "/api/webhooks/deliveries",
   );
   return deliveries;
+}
+
+// --- trigger hooks -----------------------------------------------------------
+
+export interface Trigger {
+  id: string;
+  label: string | null;
+  machineId: string;
+  action: string;
+  params: Record<string, unknown>;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
+export async function listTriggers(): Promise<Trigger[]> {
+  const { triggers } = await request<{ triggers: Trigger[] }>("/api/triggers");
+  return triggers;
+}
+
+export async function createTrigger(input: {
+  machineId: string;
+  action: string;
+  params?: Record<string, unknown>;
+  label?: string;
+}): Promise<{ id: string; token: string; url: string }> {
+  return request("/api/triggers", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function deleteTrigger(id: string): Promise<void> {
+  await request(`/api/triggers/${id}`, { method: "DELETE" });
+}
+
+// --- alerts ------------------------------------------------------------------
+
+export interface Alert {
+  id: number;
+  ts: number;
+  type: "machine_offline" | "job_failed";
+  machineId: string | null;
+  jobId: string | null;
+  status: string | null;
+  detail: string | null;
+  delivered: boolean;
+}
+
+export interface AlertConfig {
+  webhookUrl: string;
+  events: { machine_offline: boolean; job_failed: boolean };
+}
+
+export async function listAlerts(): Promise<Alert[]> {
+  const { alerts } = await request<{ alerts: Alert[] }>("/api/alerts");
+  return alerts;
+}
+
+export async function getAlertConfig(): Promise<AlertConfig> {
+  return request("/api/alerts/config");
+}
+
+export async function updateAlertConfig(cfg: AlertConfig): Promise<void> {
+  await request("/api/alerts/config", { method: "PUT", body: JSON.stringify(cfg) });
 }
 
 export async function getJobLogs(id: string): Promise<LogLine[]> {

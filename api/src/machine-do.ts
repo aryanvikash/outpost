@@ -13,16 +13,11 @@ import { DurableObject } from "cloudflare:workers";
 import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import type { Env } from "./env";
-import {
-  heartbeatSec,
-  githubAppConfigured,
-  maxQueueAgeSec,
-  alertsConfigured,
-} from "./env";
+import { heartbeatSec, githubAppConfigured, maxQueueAgeSec } from "./env";
 import { DB } from "./db/index";
 import { queue, type QueueRow } from "./db/queue-schema";
 import { setCommitStatus } from "./github-app";
-import { sendAlert, type AlertEvent } from "./notify";
+import { sendAlert, alertEventsFromConfig, type AlertEvent } from "./notify";
 import {
   PROTOCOL_VERSION,
   parseAgentMessage,
@@ -606,8 +601,34 @@ export class MachineDO extends DurableObject<Env> {
 
   /** Fire an operational alert (best-effort, non-blocking). */
   private notify(event: AlertEvent): void {
-    if (!alertsConfigured(this.env)) return;
-    this.ctx.waitUntil(sendAlert(this.env, event));
+    this.ctx.waitUntil(this.recordAndDispatchAlert(event));
+  }
+
+  /**
+   * Record every alert in D1 (for the dashboard's in-app feed), then dispatch it
+   * outbound if a destination is configured (dashboard config, falling back to
+   * the ALERT_WEBHOOK_URL env secret) and this event type is enabled.
+   */
+  private async recordAndDispatchAlert(event: AlertEvent): Promise<void> {
+    const [urlCfg, eventsCfg] = await Promise.all([
+      this.db.getConfig("alert_webhook_url"),
+      this.db.getConfig("alert_events"),
+    ]);
+    const url = urlCfg || this.env.ALERT_WEBHOOK_URL || "";
+    const enabled = alertEventsFromConfig(eventsCfg)[event.type];
+
+    const id = await this.db.insertAlert({
+      ts: event.ts,
+      type: event.type,
+      machineId: event.machineId,
+      jobId: event.jobId ?? null,
+      status: event.status ?? null,
+      detail: event.detail ?? null,
+    });
+
+    if (url && enabled && (await sendAlert(url, event))) {
+      await this.db.markAlertDelivered(id);
+    }
   }
 
   /**
