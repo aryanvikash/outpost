@@ -50,6 +50,25 @@ const TERMINAL = new Set([
 // push should deploy the latest commit, not replay every intermediate one.
 const COALESCE_ACTIONS = new Set(["deploy"]);
 
+// Max automatic re-attempts for a non-idempotent job (deploy, run-hook) that was
+// interrupted mid-run by an agent disconnect. Bounded so a repeatedly-crashing
+// agent can't replay the same job forever.
+export const MAX_JOB_RETRIES = 1;
+
+/**
+ * Decide what to do with an in-flight job when the agent disconnects before
+ * returning a result. Idempotent actions are always safe to requeue. A
+ * non-idempotent action (deploy/run-hook) is retried up to MAX_JOB_RETRIES,
+ * then given up as interrupted. Pure so the policy is unit-tested directly.
+ */
+export function retryDecision(
+  idempotent: boolean,
+  retries: number,
+): "requeue" | "interrupt" {
+  if (idempotent) return "requeue";
+  return retries < MAX_JOB_RETRIES ? "requeue" : "interrupt";
+}
+
 export class MachineDO extends DurableObject<Env> {
   private db: DB;
   /** Drizzle over the DO's own SQLite — the per-machine job queue. */
@@ -71,12 +90,23 @@ export class MachineDO extends DurableObject<Env> {
           status      TEXT NOT NULL,
           created_at  INTEGER NOT NULL,
           dispatched_at INTEGER,
+          retries     INTEGER NOT NULL DEFAULT 0,
           gh_repo     TEXT,
           gh_sha      TEXT,
           gh_installation_id INTEGER
         );
         CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
       `);
+      // Add the retry counter to queues created before it existed. There is no
+      // migration framework for DO SQLite, so this idempotent ALTER stands in;
+      // it throws "duplicate column" once the column is present, which we ignore.
+      try {
+        this.ctx.storage.sql.exec(
+          `ALTER TABLE queue ADD COLUMN retries INTEGER NOT NULL DEFAULT 0`,
+        );
+      } catch {
+        /* column already present */
+      }
     });
   }
 
@@ -594,9 +624,11 @@ export class MachineDO extends DurableObject<Env> {
   }
 
   /**
-   * Connection lost. Mark offline. Any job that was dispatched/running but never
-   * returned a result is INTERRUPTED. Per PROTOCOL.md §6 it is not silently
-   * re-run unless its action is idempotent (then it's requeued for next connect).
+   * Connection lost. Mark offline and decide the fate of any job that was
+   * dispatched/running but never returned a result (see retryDecision): an
+   * idempotent action is requeued for next connect; a non-idempotent one
+   * (deploy/run-hook) is retried up to MAX_JOB_RETRIES, then given up as
+   * interrupted with an alert. Per PROTOCOL.md §6.
    */
   private async handleDisconnect(): Promise<void> {
     const machineId = await this.getMachineId();
@@ -610,16 +642,19 @@ export class MachineDO extends DurableObject<Env> {
 
     const now = Date.now();
     for (const job of inFlight) {
-      if (job.idempotent) {
-        // Safe to retry: reset to queued, delivered on next connect.
+      const retries = job.retries ?? 0;
+      if (retryDecision(job.idempotent === 1, retries) === "requeue") {
+        // Requeue for redelivery on next connect. Bumping retries bounds the
+        // auto-retry of non-idempotent jobs; created_at is kept so the queue
+        // TTL still applies (a retry of a stale commit is expired, not run).
         this.q
           .update(queue)
-          .set({ status: "queued", dispatched_at: null })
+          .set({ status: "queued", dispatched_at: null, retries: retries + 1 })
           .where(eq(queue.job_id, job.job_id))
           .run();
         await this.db.setJobStatus(job.job_id, "queued");
       } else {
-        // Non-idempotent: terminate as interrupted, require manual re-enqueue.
+        // Retries exhausted: give up as interrupted and alert.
         this.q.delete(queue).where(eq(queue.job_id, job.job_id)).run();
         await this.db.setJobStatus(job.job_id, "interrupted", {
           finishedAt: now,

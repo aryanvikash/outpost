@@ -15,6 +15,7 @@ export const queue = sqliteTable("queue", {
   status: text("status").notNull(),
   created_at: integer("created_at").notNull(),
   dispatched_at: integer("dispatched_at"),
+  retries: integer("retries").notNull().default(0),
   gh_repo: text("gh_repo"),
   gh_sha: text("gh_sha"),
   gh_installation_id: integer("gh_installation_id"),
