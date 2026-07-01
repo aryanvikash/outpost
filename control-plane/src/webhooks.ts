@@ -88,52 +88,60 @@ webhooks.post("/github", async (c) => {
   }
   if (!repo) return c.json({ error: "missing repository" }, 400);
 
-  const bindings = await db.findBindings(repo, branch);
-  if (bindings.length === 0) {
-    await db.recordDelivery({ ts: now, event: "push", repo, branch, sha, matched: 0, result: "no binding" });
-    return c.json({ ok: true, matched: 0, message: "no binding for repo/branch" });
-  }
-
-  const enqueued: Array<{ jobId: string; machineId: string; dispatched: boolean }> = [];
-  for (const b of bindings) {
-    const baseParams = safeParse(b.params_json);
-    // For deploy, the pushed branch is authoritative.
-    const params =
-      b.action === "deploy" ? { ...baseParams, branch } : baseParams;
-
-    const github =
-      sha && typeof installationId === "number"
-        ? { repo, sha, installationId }
-        : undefined;
-
-    const result = await enqueueJob(c.env, {
-      machineId: b.machine_id,
-      action: b.action,
-      params,
-      actor: `github:${repo}@${branch}`,
-      github,
-    });
-    if (result.ok) {
-      enqueued.push({
-        jobId: result.jobId,
-        machineId: b.machine_id,
-        dispatched: result.dispatched,
-      });
+  // From here on we act on the push. If any awaited step throws after we've
+  // claimed the delivery id, release it so the provider's retry can reprocess
+  // instead of being deduped away (see forgetDelivery).
+  try {
+    const bindings = await db.findBindings(repo, branch);
+    if (bindings.length === 0) {
+      await db.recordDelivery({ ts: now, event: "push", repo, branch, sha, matched: 0, result: "no binding" });
+      return c.json({ ok: true, matched: 0, message: "no binding for repo/branch" });
     }
+
+    const enqueued: Array<{ jobId: string; machineId: string; dispatched: boolean }> = [];
+    for (const b of bindings) {
+      const baseParams = safeParse(b.params_json);
+      // For deploy, the pushed branch is authoritative.
+      const params =
+        b.action === "deploy" ? { ...baseParams, branch } : baseParams;
+
+      const github =
+        sha && typeof installationId === "number"
+          ? { repo, sha, installationId }
+          : undefined;
+
+      const result = await enqueueJob(c.env, {
+        machineId: b.machine_id,
+        action: b.action,
+        params,
+        actor: `github:${repo}@${branch}`,
+        github,
+      });
+      if (result.ok) {
+        enqueued.push({
+          jobId: result.jobId,
+          machineId: b.machine_id,
+          dispatched: result.dispatched,
+        });
+      }
+    }
+
+    await db.recordDelivery({
+      ts: now,
+      event: "push",
+      repo,
+      branch,
+      sha,
+      matched: bindings.length,
+      result: `enqueued ${enqueued.length}`,
+      jobIds: enqueued.map((e) => e.jobId),
+    });
+
+    return c.json({ ok: true, matched: bindings.length, enqueued });
+  } catch (err) {
+    if (deliveryId) await db.forgetDelivery(deliveryId);
+    throw err;
   }
-
-  await db.recordDelivery({
-    ts: now,
-    event: "push",
-    repo,
-    branch,
-    sha,
-    matched: bindings.length,
-    result: `enqueued ${enqueued.length}`,
-    jobIds: enqueued.map((e) => e.jobId),
-  });
-
-  return c.json({ ok: true, matched: bindings.length, enqueued });
 });
 
 function safeParse(s: string): Record<string, unknown> {

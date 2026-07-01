@@ -195,15 +195,23 @@ export class MachineDO extends DurableObject<Env> {
     const now = Date.now();
 
     // Coalesce: a newer deploy supersedes any still-queued deploy of the same
-    // branch, so a burst of pushes (or a backlog built up while the agent was
-    // offline) collapses to the latest commit instead of replaying each one. A
-    // job already dispatched/running is in flight and is left untouched.
-    if (COALESCE_ACTIONS.has(job.action)) {
+    // repo + branch, so a burst of pushes (or a backlog built up while the agent
+    // was offline) collapses to the latest commit instead of replaying each one.
+    // A job already dispatched/running is in flight and is left untouched.
+    //
+    // The repo is required in the key: one machine can have bindings for several
+    // repos on the same branch, and superseding across repos would drop a repo's
+    // deploy entirely. We only coalesce when the repo is known (gh_repo, set for
+    // GitHub pushes); without it we can't prove two same-branch deploys share a
+    // target, so we conservatively don't coalesce.
+    const repo = job.github?.repo ?? null;
+    if (COALESCE_ACTIONS.has(job.action) && repo !== null) {
       const branch = branchOf(job.params);
       const stale = this.ctx.storage.sql
         .exec<QueueRow>(
-          `SELECT * FROM queue WHERE status = 'queued' AND action = ?`,
+          `SELECT * FROM queue WHERE status = 'queued' AND action = ? AND gh_repo = ?`,
           job.action,
+          repo,
         )
         .toArray()
         .filter((r) => branchOf(safeParams(r.params_json)) === branch);

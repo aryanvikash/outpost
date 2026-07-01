@@ -90,50 +90,57 @@ webhooksBitbucket.post("/bitbucket", async (c) => {
     return c.json({ ok: true, ignored: "no branch changes" });
   }
 
-  // A push may touch several branches; enqueue for each matching binding.
-  const enqueued: Array<{ jobId: string; machineId: string; dispatched: boolean }> = [];
-  let matched = 0;
-  let lastBranch = "";
-  let lastSha = "";
-  for (const change of changes) {
-    lastBranch = change.branch;
-    lastSha = change.sha;
-    const bindings = await db.findBindings(repo, change.branch);
-    matched += bindings.length;
-    for (const b of bindings) {
-      const baseParams = safeParse(b.params_json);
-      // For deploy, the pushed branch is authoritative.
-      const params =
-        b.action === "deploy" ? { ...baseParams, branch: change.branch } : baseParams;
+  // A push may touch several branches; enqueue for each matching binding. If any
+  // awaited step throws after we've claimed the delivery id, release it so the
+  // provider's retry can reprocess instead of being deduped away.
+  try {
+    const enqueued: Array<{ jobId: string; machineId: string; dispatched: boolean }> = [];
+    let matched = 0;
+    let lastBranch = "";
+    let lastSha = "";
+    for (const change of changes) {
+      lastBranch = change.branch;
+      lastSha = change.sha;
+      const bindings = await db.findBindings(repo, change.branch);
+      matched += bindings.length;
+      for (const b of bindings) {
+        const baseParams = safeParse(b.params_json);
+        // For deploy, the pushed branch is authoritative.
+        const params =
+          b.action === "deploy" ? { ...baseParams, branch: change.branch } : baseParams;
 
-      const result = await enqueueJob(c.env, {
-        machineId: b.machine_id,
-        action: b.action,
-        params,
-        actor: `bitbucket:${repo}@${change.branch}`,
-      });
-      if (result.ok) {
-        enqueued.push({
-          jobId: result.jobId,
+        const result = await enqueueJob(c.env, {
           machineId: b.machine_id,
-          dispatched: result.dispatched,
+          action: b.action,
+          params,
+          actor: `bitbucket:${repo}@${change.branch}`,
         });
+        if (result.ok) {
+          enqueued.push({
+            jobId: result.jobId,
+            machineId: b.machine_id,
+            dispatched: result.dispatched,
+          });
+        }
       }
     }
+
+    await db.recordDelivery({
+      ts: now,
+      event,
+      repo,
+      branch: lastBranch,
+      sha: lastSha,
+      matched,
+      result: matched === 0 ? "no binding" : `enqueued ${enqueued.length}`,
+      jobIds: enqueued.map((e) => e.jobId),
+    });
+
+    return c.json({ ok: true, matched, enqueued });
+  } catch (err) {
+    if (deliveryId) await db.forgetDelivery(deliveryId);
+    throw err;
   }
-
-  await db.recordDelivery({
-    ts: now,
-    event,
-    repo,
-    branch: lastBranch,
-    sha: lastSha,
-    matched,
-    result: matched === 0 ? "no binding" : `enqueued ${enqueued.length}`,
-    jobIds: enqueued.map((e) => e.jobId),
-  });
-
-  return c.json({ ok: true, matched, enqueued });
 });
 
 function safeParse(s: string): Record<string, unknown> {
