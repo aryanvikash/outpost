@@ -167,11 +167,7 @@ export const triggers = sqliteTable(
     id: text("id").primaryKey(),
     token_hash: text("token_hash").notNull().unique(),
     label: text("label"),
-    machine_id: text("machine_id")
-      .notNull()
-      .references(() => machines.id),
-    action: text("action").notNull(),
-    params_json: text("params_json").notNull().default("{}"),
+    targets_json: text("targets_json").notNull().default("[]"),
     created_by: text("created_by"),
     created_at: integer("created_at").notNull(),
     last_used_at: integer("last_used_at"),

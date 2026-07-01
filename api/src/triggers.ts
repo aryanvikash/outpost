@@ -7,7 +7,7 @@
 
 import { Hono } from "hono";
 import type { Env } from "./env";
-import { DB } from "./db/index";
+import { DB, type TriggerTarget } from "./db/index";
 import { sha256Hex } from "./crypto";
 import { enqueueJob } from "./enqueue";
 
@@ -23,34 +23,46 @@ triggerHooks.post("/:token", async (c) => {
   const trigger = await db.findTriggerByHash(await sha256Hex(token));
   if (!trigger) return c.json({ error: "unknown trigger" }, 404);
 
-  const params = safeParse(trigger.params_json);
-  const result = await enqueueJob(c.env, {
-    machineId: trigger.machine_id,
-    action: trigger.action,
-    params,
-    actor: `trigger:${trigger.label ?? trigger.id}`,
-  });
+  const targets = safeTargets(trigger.targets_json);
+  const label = trigger.label ?? trigger.id;
+
+  // Fan out: fire every target, collecting the jobs we managed to enqueue.
+  const jobIds: string[] = [];
+  const results: Array<{ machineId: string; action: string; jobId?: string; error?: string }> = [];
+  for (const t of targets) {
+    const r = await enqueueJob(c.env, {
+      machineId: t.machineId,
+      action: t.action,
+      params: t.params ?? {},
+      actor: `trigger:${label}`,
+    });
+    if (r.ok) {
+      jobIds.push(r.jobId);
+      results.push({ machineId: t.machineId, action: t.action, jobId: r.jobId });
+    } else {
+      results.push({ machineId: t.machineId, action: t.action, error: r.error });
+    }
+  }
 
   await db.touchTrigger(trigger.id, now);
   await db.recordDelivery({
     ts: now,
     provider: "custom",
     event: "trigger",
-    repo: trigger.label ?? trigger.id,
-    matched: result.ok ? 1 : 0,
-    result: result.ok ? "enqueued 1" : result.error,
-    jobIds: result.ok ? [result.jobId] : [],
+    repo: label,
+    matched: targets.length,
+    result: `enqueued ${jobIds.length}`,
+    jobIds,
   });
 
-  if (!result.ok) return c.json({ error: result.error }, result.status as 400);
-  return c.json({ ok: true, jobId: result.jobId, dispatched: result.dispatched });
+  return c.json({ ok: true, enqueued: jobIds.length, jobIds, results });
 });
 
-function safeParse(s: string): Record<string, unknown> {
+function safeTargets(json: string): TriggerTarget[] {
   try {
-    const v = JSON.parse(s);
-    return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? (v as TriggerTarget[]) : [];
   } catch {
-    return {};
+    return [];
   }
 }

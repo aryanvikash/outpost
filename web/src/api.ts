@@ -220,12 +220,16 @@ export async function listDeliveries(): Promise<Delivery[]> {
 
 // --- trigger hooks -----------------------------------------------------------
 
-export interface Trigger {
-  id: string;
-  label: string | null;
+export interface TriggerTarget {
   machineId: string;
   action: string;
   params: Record<string, unknown>;
+}
+
+export interface Trigger {
+  id: string;
+  label: string | null;
+  targets: TriggerTarget[];
   createdAt: number;
   lastUsedAt: number | null;
 }
@@ -236,10 +240,8 @@ export async function listTriggers(): Promise<Trigger[]> {
 }
 
 export async function createTrigger(input: {
-  machineId: string;
-  action: string;
-  params?: Record<string, unknown>;
   label?: string;
+  targets: Array<{ machineId: string; action: string; params?: Record<string, unknown> }>;
 }): Promise<{ id: string; token: string; url: string }> {
   return request("/api/triggers", { method: "POST", body: JSON.stringify(input) });
 }

@@ -25,6 +25,13 @@ export interface GithubContext {
   installationId: number;
 }
 
+/** One target a trigger fires: an action on a machine with its params. */
+export interface TriggerTarget {
+  machineId: string;
+  action: string;
+  params: Record<string, unknown>;
+}
+
 const {
   machines,
   enrollTokens,
@@ -472,9 +479,7 @@ export class DB {
     id: string;
     tokenHash: string;
     label: string | null;
-    machineId: string;
-    action: string;
-    paramsJson: string;
+    targetsJson: string;
     createdBy: string;
     createdAt: number;
   }): Promise<void> {
@@ -482,9 +487,7 @@ export class DB {
       id: t.id,
       token_hash: t.tokenHash,
       label: t.label,
-      machine_id: t.machineId,
-      action: t.action,
-      params_json: t.paramsJson,
+      targets_json: t.targetsJson,
       created_by: t.createdBy,
       created_at: t.createdAt,
     });

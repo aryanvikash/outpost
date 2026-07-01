@@ -14,7 +14,7 @@ import type { Context, Next } from "hono";
 import type { Env } from "./env";
 import { signAdminJwt, verifyAdminJwt } from "./admin-auth";
 import { retentionDays, webhookDedupRetentionDays } from "./env";
-import { DB } from "./db/index";
+import { DB, type TriggerTarget } from "./db/index";
 import {
   generateId,
   generateToken,
@@ -496,25 +496,31 @@ admin.post("/jobs/:id/cancel", async (c) => {
 
 // --- trigger hooks ----------------------------------------------------------
 
-/** Create a trigger hook bound to a machine + action. Returns the secret URL once. */
+/**
+ * Create a trigger hook that fans out to one or more targets (machine + action).
+ * Returns the secret URL once. Hitting the URL fires every target.
+ */
 admin.post("/triggers", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
-    machineId?: string;
-    action?: string;
-    params?: Record<string, unknown>;
     label?: string;
+    targets?: Array<{ machineId?: string; action?: string; params?: Record<string, unknown> }>;
   };
-  const machineId = (body.machineId ?? "").trim();
-  const action = (body.action ?? "").trim();
-  const params = body.params ?? {};
-  if (!machineId || !action) return c.json({ error: "machineId and action required" }, 400);
-  if (!isKnownAction(action)) return c.json({ error: `unknown action: ${action}` }, 400);
-  const invalid = ACTIONS[action].validate(params);
-  if (invalid) return c.json({ error: invalid }, 400);
+  const rawTargets = Array.isArray(body.targets) ? body.targets : [];
+  if (rawTargets.length === 0) return c.json({ error: "at least one target required" }, 400);
 
   const db = new DB(c.env.DB);
-  const machine = await db.getMachine(machineId);
-  if (!machine) return c.json({ error: "machine not found" }, 404);
+  const targets: TriggerTarget[] = [];
+  for (const t of rawTargets) {
+    const machineId = (t.machineId ?? "").trim();
+    const action = (t.action ?? "").trim();
+    const params = t.params ?? {};
+    if (!machineId || !action) return c.json({ error: "each target needs machineId and action" }, 400);
+    if (!isKnownAction(action)) return c.json({ error: `unknown action: ${action}` }, 400);
+    const invalid = ACTIONS[action].validate(params);
+    if (invalid) return c.json({ error: invalid }, 400);
+    if (!(await db.getMachine(machineId))) return c.json({ error: `machine not found: ${machineId}` }, 404);
+    targets.push({ machineId, action, params });
+  }
 
   const id = generateId("th");
   const token = generateToken("oth");
@@ -523,16 +529,14 @@ admin.post("/triggers", async (c) => {
     id,
     tokenHash: await sha256Hex(token),
     label: (body.label ?? "").trim() || null,
-    machineId,
-    action,
-    paramsJson: JSON.stringify(params),
+    targetsJson: JSON.stringify(targets),
     createdBy: adminActor(c),
     createdAt: now,
   });
-  await db.audit({ ts: now, actor: adminActor(c), action: "trigger.create", target: id, detail: { machineId, action } });
+  await db.audit({ ts: now, actor: adminActor(c), action: "trigger.create", target: id, detail: { targets: targets.length } });
 
   const url = `${new URL(c.req.url).origin}/hooks/${token}`;
-  return c.json({ id, token, url, action, machineId }, 201);
+  return c.json({ id, token, url }, 201);
 });
 
 admin.get("/triggers", async (c) => {
@@ -542,9 +546,7 @@ admin.get("/triggers", async (c) => {
     triggers: rows.map((t) => ({
       id: t.id,
       label: t.label,
-      machineId: t.machine_id,
-      action: t.action,
-      params: JSON.parse(t.params_json),
+      targets: safeTargets(t.targets_json),
       createdAt: t.created_at,
       lastUsedAt: t.last_used_at,
     })),
@@ -625,6 +627,16 @@ function bearer(header: string | undefined): string | null {
 
 function adminActor(c: Context<AppCtx>): string {
   return c.req.header("X-Outpost-Admin") ?? "admin";
+}
+
+/** Parse a trigger's stored targets, tolerating malformed data. */
+function safeTargets(json: string): TriggerTarget[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? (v as TriggerTarget[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Parse the stored alert_events JSON, defaulting both event types to enabled. */
