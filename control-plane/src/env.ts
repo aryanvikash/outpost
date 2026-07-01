@@ -19,6 +19,24 @@ export interface Env {
    * long outage. Default 3600s (1h).
    */
   MAX_QUEUE_AGE_SEC?: string;
+  /**
+   * Retention window (days) for append-only history: job rows, job logs, audit
+   * log, and webhook deliveries. Pruned daily by the scheduled handler. Default 30.
+   */
+  RETENTION_DAYS?: string;
+  /**
+   * Retention window (days) for webhook de-dup ids — only needs to outlive a
+   * provider's retry window, so it's kept short. Default 7.
+   */
+  WEBHOOK_DEDUP_RETENTION_DAYS?: string;
+
+  // --- Alerting (optional) --------------------------------------------------
+  /**
+   * Outgoing webhook URL for operational alerts (machine offline, job failed).
+   * A compact JSON payload is POSTed here; works with Slack/Discord/custom
+   * endpoints. Unset = alerting disabled.
+   */
+  ALERT_WEBHOOK_URL?: string;
 
   // --- GitHub App (Phase 6, optional) --------------------------------------
   /** Webhook secret used to verify X-Hub-Signature-256. */
@@ -64,4 +82,19 @@ export function defaultJobTimeoutSec(env: Env): number {
 export function maxQueueAgeSec(env: Env): number {
   const n = Number(env.MAX_QUEUE_AGE_SEC);
   return Number.isFinite(n) && n > 0 ? n : 3600;
+}
+
+export function retentionDays(env: Env): number {
+  const n = Number(env.RETENTION_DAYS);
+  return Number.isFinite(n) && n > 0 ? n : 30;
+}
+
+export function webhookDedupRetentionDays(env: Env): number {
+  const n = Number(env.WEBHOOK_DEDUP_RETENTION_DAYS);
+  return Number.isFinite(n) && n > 0 ? n : 7;
+}
+
+/** True when operational alerts can be posted (alert webhook configured). */
+export function alertsConfigured(env: Env): boolean {
+  return Boolean(env.ALERT_WEBHOOK_URL);
 }

@@ -123,6 +123,7 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	}
 
 	go c.heartbeatLoop(connCtx)
+	go c.keepaliveLoop(connCtx, conn, connCancel)
 
 	return c.readLoop(connCtx, conn)
 }
@@ -231,6 +232,43 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 				Stats:   hostStats(),
 			}
 			if err := c.send(ctx, hb); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// keepaliveLoop detects a dead peer. It sends a WebSocket ping every heartbeat
+// interval and treats a missing pong as a dropped connection: on a half-open
+// socket (killed without a TCP FIN) readLoop would otherwise block for ~2h on
+// OS keepalive, so a ping that isn't ponged within one interval trips here and
+// we cancel the connection to let Run's reconnect loop take over.
+//
+// Ping/pong is handled at the WebSocket runtime layer — Cloudflare answers pings
+// even while the MachineDO is hibernated — so an idle-but-healthy connection is
+// never falsely dropped. The pong is delivered through the concurrent readLoop,
+// which must be running for Ping to complete.
+func (c *Client) keepaliveLoop(ctx context.Context, conn *websocket.Conn, cancel context.CancelFunc) {
+	interval := c.heartbeat
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			pingCtx, pingCancel := context.WithTimeout(ctx, interval)
+			err := conn.Ping(pingCtx)
+			pingCancel()
+			if err != nil {
+				if ctx.Err() != nil {
+					return // connection already shutting down
+				}
+				c.log.Warn("keepalive ping failed, dropping connection", "err", err)
+				cancel()
 				return
 			}
 		}
