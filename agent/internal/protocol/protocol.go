@@ -1,6 +1,6 @@
 // Package protocol defines the Outpost wire protocol in Go.
 //
-// It mirrors PROTOCOL.md (the source of truth) and control-plane/src/protocol.ts.
+// It mirrors PROTOCOL.md (the source of truth) and api/src/protocol.ts.
 // Keep all three in sync. Protocol version: 1.
 package protocol
 
@@ -38,10 +38,10 @@ type Envelope struct {
 	Version int    `json:"version"`
 }
 
-// --- Agent → control plane ---------------------------------------------------
+// --- Agent → API ---------------------------------------------------
 
 // DeployConfig describes where the deploy action operates on this host. Reported
-// so the control plane / UI can show the target; never accepted from the wire.
+// so the API / UI can show the target; never accepted from the wire.
 type DeployConfig struct {
 	AppDir    string `json:"appDir"`
 	Remote    string `json:"remote"`
@@ -116,7 +116,7 @@ type Ack struct {
 	JobID   string `json:"jobId"`
 }
 
-// --- Control plane → agent ---------------------------------------------------
+// --- API → agent ---------------------------------------------------
 
 // Job is a unit of work: a named action plus validated params. Never a command.
 type Job struct {

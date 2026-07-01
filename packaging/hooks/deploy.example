@@ -16,7 +16,7 @@
 #
 # stdout/stderr stream back as the job logs. Exit non-zero to fail the job.
 #
-# This file is host-owned: the control plane can only trigger it, never change it.
+# This file is host-owned: the API can only trigger it, never change it.
 set -eu
 
 APP_DIR="${OUTPOST_APP_DIR:-/srv/app}"

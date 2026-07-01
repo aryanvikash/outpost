@@ -1,4 +1,4 @@
-// Package config loads the agent's control-plane URL, machine id, and device
+// Package config loads the agent's API URL, machine id, and device
 // key path from a file (mode 0600) and/or environment variables.
 package config
 
@@ -99,11 +99,11 @@ func (c *Config) loadFile(path string) error {
 
 func (c *Config) validate() error {
 	if c.ControlPlaneURL == "" {
-		return errors.New("control-plane URL is required (set OUTPOST_URL or url= in config)")
+		return errors.New("API URL is required (set OUTPOST_URL or url= in config)")
 	}
 	if !strings.HasPrefix(c.ControlPlaneURL, "wss://") &&
 		!strings.HasPrefix(c.ControlPlaneURL, "ws://") {
-		return fmt.Errorf("control-plane URL must start with wss:// (or ws:// for dev), got %q", c.ControlPlaneURL)
+		return fmt.Errorf("API URL must start with wss:// (or ws:// for dev), got %q", c.ControlPlaneURL)
 	}
 	if c.MachineID == "" {
 		return errors.New("machine id is required — run `outpost-agent add` to enroll this device first")

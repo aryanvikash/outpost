@@ -1,7 +1,7 @@
 // Package actions implements the agent's allowlist of named actions.
 //
 // SECURITY MODEL: this is the only place that maps an action name to concrete
-// commands. The control plane never supplies a command string — it sends a
+// commands. The API never supplies a command string — it sends a
 // named action plus a constrained params object. Adding an action is a code
 // change, reviewable in a PR. Unknown actions and invalid params are refused.
 package actions
@@ -25,13 +25,13 @@ type Handler func(ctx context.Context, params json.RawMessage, emit LogFunc) (in
 type Action struct {
 	Name string
 	// Idempotent marks actions that are safe to re-run after an interrupted
-	// dispatch (drives redelivery semantics in the control plane).
+	// dispatch (drives redelivery semantics in the API).
 	Idempotent bool
 	Handle     Handler
 }
 
 // Registry is the closed set of supported actions. Keep in sync with
-// PROTOCOL.md §7 and control-plane/src/actions.ts.
+// PROTOCOL.md §7 and api/src/actions.ts.
 var Registry = map[string]Action{
 	"healthcheck": {Name: "healthcheck", Idempotent: true, Handle: handleHealthcheck},
 	"deploy":      {Name: "deploy", Idempotent: false, Handle: handleDeploy},

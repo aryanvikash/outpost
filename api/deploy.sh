@@ -1,5 +1,5 @@
 #!/bin/sh
-# Outpost control-plane deploy wrapper.
+# Outpost API deploy wrapper.
 #
 # Usage:
 #   ./deploy.sh            full deploy: login → ensure D1 → migrate → deploy → ensure ADMIN_TOKEN
@@ -16,7 +16,7 @@
 #   D1_NAME       D1 database name (default: outpost)
 set -eu
 
-# Run from the control-plane dir regardless of where invoked.
+# Run from the api dir regardless of where invoked.
 cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 WRANGLER="npx wrangler"
@@ -125,7 +125,7 @@ do_dev() {
   fi
   log "applying local D1 migrations"
   $WRANGLER d1 migrations apply "$D1_NAME" --local
-  log "starting local control plane on http://localhost:8787 (Ctrl-C to stop)"
+  log "starting local API on http://localhost:8787 (Ctrl-C to stop)"
   exec $WRANGLER dev --port 8787 --local
 }
 

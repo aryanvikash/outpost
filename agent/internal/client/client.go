@@ -1,5 +1,5 @@
-// Package client implements the agent's outbound connection to the control
-// plane: dial wss, authenticate, heartbeat, execute jobs, stream logs, and
+// Package client implements the agent's outbound connection to the API:
+// dial wss, authenticate, heartbeat, execute jobs, stream logs, and
 // reconnect with exponential backoff + jitter on any drop.
 //
 // The reconnect loop is the most important part: if the agent isn't connected,

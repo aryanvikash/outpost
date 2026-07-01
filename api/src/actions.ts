@@ -1,7 +1,7 @@
-// Action catalog (control-plane view).
+// Action catalog (API view).
 //
 // The AGENT is the authoritative validator and the only place that maps an
-// action to concrete commands (see agent/internal/actions). The control plane
+// action to concrete commands (see agent/internal/actions). The API
 // keeps this lightweight catalog so it can:
 //   - reject enqueue of an unknown action early, and
 //   - know whether an action is idempotent (drives interrupted-job redelivery).

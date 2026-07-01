@@ -45,7 +45,7 @@ const rootRoute = createRootRoute({
             </span>
             <span className="leading-tight">
               <span className="block text-[17px] font-bold tracking-tight">Outpost</span>
-              <span className="block text-xs text-muted-foreground/70">control plane</span>
+              <span className="block text-xs text-muted-foreground/70">API</span>
             </span>
           </Link>
           {authed && (

@@ -1,6 +1,6 @@
-# Outpost Control Plane
+# Outpost API
 
-The **control plane** is the server side of Outpost, running entirely on
+The **API** is the server side of Outpost, running entirely on
 **Cloudflare**: a **Worker** (the front door, built with [Hono](https://hono.dev))
 + **Durable Objects** (one per managed machine) + **D1** (fleet-wide registry, job
 history, audit log). It terminates the agents' outbound WebSocket connections,
@@ -19,7 +19,7 @@ That direction is the core security property — see [`../SECURITY.md`](../SECUR
 ## Deploy
 
 ```sh
-cd control-plane
+cd api
 npm install
 npm run deploy     # wrapper around ./deploy.sh — idempotent, re-run for every deploy
 ```
@@ -127,7 +127,7 @@ used on admin routes.
 - **Admin** — a master `ADMIN_TOKEN` (for `curl`/CI), or a short-lived session JWT
   (HS256, ~12h) the dashboard gets from `/api/admin/login`. The browser never holds
   the master token. See [`admin-auth.ts`](./src/admin-auth.ts).
-- **Devices** — each holds its own Ed25519 key; the control plane stores only the
+- **Devices** — each holds its own Ed25519 key; the API stores only the
   public key and verifies a per-connect signature (`kid`/`iss` select the key).
   A D1 leak exposes no usable device credential. See [`device-auth.ts`](./src/device-auth.ts).
 - **Enroll tokens** — short-lived `oet_…`, stored hashed, consumed on use. The
@@ -167,7 +167,7 @@ migrations/          D1 schema (numbered SQL)
 ## Development
 
 ```sh
-cd control-plane
+cd api
 npm run typecheck      # tsc --noEmit
 npm test               # vitest (uses @cloudflare/vitest-pool-workers)
 npm run test:watch

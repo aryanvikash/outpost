@@ -7,15 +7,15 @@ details are in [`PROTOCOL.md`](./PROTOCOL.md) §2.
 ## TL;DR
 
 - Each device has its **own Ed25519 keypair, generated on the device**. The
-  **private key never leaves the machine.** The control plane stores only the
+  **private key never leaves the machine.** The API stores only the
   **public key**.
 - First-time registration (`outpost-agent add`) is authorized by a short-lived,
   one-time **enroll token** from the dashboard/admin API. That token is the only
   secret that ever crosses the wire — and only once.
 - On **every** connection the agent signs a ~60-second JWT with its private key;
-  the control plane verifies it against the stored public key. No shared secret
+  the API verifies it against the stored public key. No shared secret
   is transmitted on connect, ever.
-- A D1/control-plane leak exposes only public keys, which are useless to an
+- A D1/API leak exposes only public keys, which are useless to an
   attacker.
 
 ## The two kinds of credential
@@ -31,7 +31,7 @@ details are in [`PROTOCOL.md`](./PROTOCOL.md) §2.
 ## Full lifecycle
 
 ```
- ┌─ Admin ─────────────┐      ┌─ Device (outpost-agent add) ──────────┐      ┌─ Control plane ─┐
+ ┌─ Admin ─────────────┐      ┌─ Device (outpost-agent add) ──────────┐      ┌─ API ─┐
  │ POST /api/enroll-   │      │ 1. generate Ed25519 keypair (local)   │      │                 │
  │   tokens            │─────▶│ 2. POST /enroll                       │─────▶│ verify token,   │
  │ → oet_abc (1 use,   │ copy │    Authorization: Bearer oet_abc      │      │ store PUBLIC    │
@@ -43,7 +43,7 @@ details are in [`PROTOCOL.md`](./PROTOCOL.md) §2.
                    every connect (and reconnect) thereafter:
                                               ▼
    GET /connect  Authorization: Bearer <JWT signed by agent.key, exp ~60s>
-                 → control plane loads m_xyz's public key, verifies signature,
+                 → API loads m_xyz's public key, verifies signature,
                    checks aud/exp, routes the socket to the machine's DO.
 ```
 
@@ -84,7 +84,7 @@ header  { "alg":"EdDSA", "typ":"JWT", "kid":"m_xyz" }
 payload { "iss":"m_xyz", "iat":…, "exp":…+60, "aud":"outpost-connect" }
 ```
 sent as `Authorization: Bearer <jwt>` on the `wss://…/connect` upgrade. The
-control plane (`device-auth.ts`):
+API (`device-auth.ts`):
 1. reads `kid` to find machine `m_xyz` and its stored public key,
 2. verifies the Ed25519 signature over the JWT,
 3. checks `aud`, expiry (±60s skew), max lifetime (≤300s), and that the device
@@ -93,7 +93,7 @@ control plane (`device-auth.ts`):
 
 ## Why device-generated (not server-held) keys
 
-If the control plane generated keypairs and stored the private keys, a D1 leak
+If the API generated keypairs and stored the private keys, a D1 leak
 would let an attacker impersonate every device — the same blast radius as bearer
 tokens. Generating on the device and storing only the public key means the secret
 that authenticates a machine **exists in exactly one place: that machine.** This

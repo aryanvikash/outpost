@@ -7,18 +7,18 @@
   <a href="https://github.com/aryanvikash/outpost/releases"><img src="https://img.shields.io/github/v/release/aryanvikash/outpost?sort=semver&color=7469F2&label=release" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
   <a href="./agent"><img src="https://img.shields.io/badge/agent-Go-00ADD8?logo=go&logoColor=white" alt="Go agent"></a>
-  <a href="./control-plane"><img src="https://img.shields.io/badge/control%E2%80%91plane-Cloudflare-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare control plane"></a>
+  <a href="./api"><img src="https://img.shields.io/badge/api-Cloudflare-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare API"></a>
   <a href="./PROTOCOL.md"><img src="https://img.shields.io/badge/protocol-v1-6E56CF" alt="Wire protocol v1"></a>
 </p>
 
 <p align="center">
   <b>Securely run commands (initially: deployments) on remote Linux servers from a
-  central control plane — without opening any inbound ports and without SSH.</b>
+  central API — without opening any inbound ports and without SSH.</b>
 </p>
 
 A thin **agent** (a single static Go binary) runs on each server and dials
-**outbound** over WebSocket Secure to a **control plane** running entirely on
-Cloudflare (a Worker + Durable Objects + D1). The control plane pushes **jobs**
+**outbound** over WebSocket Secure to an **API** running entirely on
+Cloudflare (a Worker + Durable Objects + D1). The API pushes **jobs**
 down that connection; the agent executes them from a **fixed allowlist of named
 actions** (never arbitrary shell), streams logs back, and reports an exit status.
 
@@ -50,15 +50,15 @@ inbound ports closed — including 22.**
   client; the Durable Object is the WebSocket server. This is what lets the
   managed box keep every inbound port closed, and it's required for the
   Hibernation API.
-- **No arbitrary command execution.** The control plane sends a *named action*
+- **No arbitrary command execution.** The API sends a *named action*
   from a vetted allowlist plus a *validated params* object — never a command
   string. Adding an action is a code change, reviewed in a PR. The mapping from
   action → concrete commands lives only in the agent.
 - **Devices hold their own keys.** Each agent generates an Ed25519 keypair on the
-  box; the control plane stores only the public key and verifies a per-connect
-  signature. A control-plane/D1 leak exposes no usable device credential. See
+  box; the API stores only the public key and verifies a per-connect
+  signature. An API/D1 leak exposes no usable device credential. See
   [`ENROLLMENT.md`](./ENROLLMENT.md).
-- **The control plane is the trust anchor.** Compromising the Worker means
+- **The API is the trust anchor.** Compromising the Worker means
   command over connected agents, so the allowlist is the blast-radius limiter.
   See [`SECURITY.md`](./SECURITY.md).
 - **The wire protocol is a public, versioned contract:** [`PROTOCOL.md`](./PROTOCOL.md).
@@ -67,7 +67,7 @@ inbound ports closed — including 22.**
 
 ```
 agent/            Go agent (single static binary)         → agent/README.md
-control-plane/    Cloudflare Worker + Durable Object + D1  → control-plane/README.md
+api/    Cloudflare Worker + Durable Object + D1  → api/README.md
 web/              Admin dashboard (React + Vite + TanStack)→ web/README.md
 PROTOCOL.md       Versioned wire-protocol spec (source of truth)
 install.sh        curl|sh installer (OS/arch detect, checksum verify, systemd)
@@ -76,16 +76,16 @@ packaging/        systemd unit, sudoers example, nfpm scripts, Dockerfile
 ```
 
 Each component has its own README for using it standalone:
-**[agent](./agent/README.md)** · **[control plane / API](./control-plane/README.md)** ·
-**[web dashboard](./web/README.md)**. The wire contract between agent and control
-plane is [`PROTOCOL.md`](./PROTOCOL.md).
+**[agent](./agent/README.md)** · **[API](./api/README.md)** ·
+**[web dashboard](./web/README.md)**. The wire contract between agent and the API
+is [`PROTOCOL.md`](./PROTOCOL.md).
 
 ## Quick start
 
-### 1. Deploy the control plane
+### 1. Deploy the API
 
 ```sh
-cd control-plane
+cd api
 npm install
 npm run deploy     # wrapper: login → create D1 + patch wrangler.toml →
                    # migrate → deploy → generate/set ADMIN_TOKEN (shown once)
@@ -197,7 +197,7 @@ sudo install -D -m 0755 packaging/hooks/deploy.example /etc/outpost/hooks/deploy
   box can't tamper with it). Validated params arrive as env vars
   (`OUTPOST_BRANCH`, `OUTPOST_APP_DIR`, …).
 
-The control plane only ever sends the action/hook **name** (validated) — the
+The API only ever sends the action/hook **name** (validated) — the
 commands live on the host, authored by someone who already controls it.
 
 ## Admin dashboard (web UI)
@@ -213,7 +213,7 @@ cp .env.example .env          # set VITE_API_BASE_URL to your Worker URL
 npm install && npm run dev     # http://localhost:5173
 ```
 
-Requires the control plane deployed with JWT login + CORS (already included; just
+Requires the API deployed with JWT login + CORS (already included; just
 `npm run deploy`). Build a static bundle with `npm run build` and host `dist/` on
 Cloudflare Pages or anywhere. See [`web/README.md`](./web/README.md).
 
@@ -239,14 +239,14 @@ routes are separate: `POST /enroll` is authorized by an **enroll token**, and
 
 ## Auto-deploy on push
 
-Outpost can deploy automatically when you push. The control plane verifies an
+Outpost can deploy automatically when you push. The API verifies an
 HMAC signature on each webhook delivery, looks up `repo + branch` bindings, and
 enqueues the bound action (default: `deploy` that branch). **GitHub** and
 **Bitbucket** are both supported.
 
 ### GitHub App
 
-Install a **GitHub App** on a repo and `push` events flow to the control plane
+Install a **GitHub App** on a repo and `push` events flow to the API
 natively (no per-repo webhook to create). On a matching push it enqueues the bound
 action and posts a commit status (pending → success/failure) back to the commit.
 
@@ -297,7 +297,7 @@ handled.
 
 The `BITBUCKET_WEBHOOK_SECRET` is required to accept deliveries; the access token
 is only needed for build-status feedback. See
-[`control-plane/README.md`](./control-plane/README.md#auto-deploy-on-push) for the
+[`api/README.md`](./api/README.md#auto-deploy-on-push) for the
 current scope (push→deploy is complete; terminal build-status feedback is a
 documented follow-up).
 
@@ -307,8 +307,8 @@ documented follow-up).
 # Agent
 cd agent && go test ./... && go vet ./...
 
-# Control plane
-cd control-plane && npm run typecheck && npm test
+# API
+cd api && npm run typecheck && npm test
 ```
 
 Defaults: heartbeat **30s**, job timeout **300s** (override per-job with

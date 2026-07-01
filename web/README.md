@@ -1,6 +1,6 @@
 # Outpost Admin UI
 
-A React dashboard for the Outpost control plane. **React + Vite + TypeScript**,
+A React dashboard for the Outpost API. **React + Vite + TypeScript**,
 data layer with **TanStack Query**, routing with **TanStack Router**. Auth is a
 short-lived **JWT** obtained by logging in with the admin password.
 
@@ -23,8 +23,8 @@ cp .env.example .env
 # VITE_API_BASE_URL=https://outpost.<subdomain>.workers.dev
 ```
 
-The control plane must be deployed with the admin-JWT + CORS changes
-(`cd control-plane && npm run deploy`). Auth uses a Bearer token (no cookies), so
+The API must be deployed with the admin-JWT + CORS changes
+(`cd api && npm run deploy`). Auth uses a Bearer token (no cookies), so
 the default permissive CORS is fine; restrict it by setting `ADMIN_UI_ORIGIN` on
 the Worker once this app has a fixed origin.
 

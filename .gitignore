@@ -19,7 +19,7 @@ app.pkcs8.pem
 *.out
 coverage.txt
 
-# ─── Node / control plane / web ──────────────────────────────────────────────
+# ─── Node / API / web ──────────────────────────────────────────────
 node_modules/
 .wrangler/
 dist/

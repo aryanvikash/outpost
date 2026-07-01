@@ -3,9 +3,9 @@
 **Protocol version: `1`**
 
 This document is the language-neutral, versioned contract between an Outpost
-**agent** (the client) and the Outpost **control plane** (the WebSocket server, a
+**agent** (the client) and the Outpost **API** (the WebSocket server, a
 Cloudflare Durable Object). It is the source of truth: the Go types in
-`agent/internal/protocol` and the TypeScript types in `control-plane/src/protocol.ts`
+`agent/internal/protocol` and the TypeScript types in `api/src/protocol.ts`
 mirror this document and MUST be kept in sync.
 
 Anyone may implement an agent in any language by conforming to this spec.
@@ -16,10 +16,10 @@ Anyone may implement an agent in any language by conforming to this spec.
 
 - **WebSocket Secure (`wss://`)** only. Plaintext `ws://` is permitted **only** for
   local development against `wrangler dev`.
-- The agent always **dials out**. The control plane is always the server. The agent
+- The agent always **dials out**. The API is always the server. The agent
   never listens for inbound connections. This is the core security property: managed
   servers can keep every inbound port closed.
-- Each agent holds **exactly one** live socket to the control plane at a time.
+- Each agent holds **exactly one** live socket to the API at a time.
 - Every application message is a single **JSON text frame** (UTF-8). Binary frames are
   reserved and currently unused.
 - **Maximum message size: 1 MiB (1048576 bytes).** Senders MUST chunk payloads (notably
@@ -29,7 +29,7 @@ Anyone may implement an agent in any language by conforming to this spec.
 ## 2. Identity, enrollment & authentication
 
 Each device has its own **Ed25519 keypair, generated on the device**. The private key
-never leaves the machine; the control plane stores only the public key. No shared secret
+never leaves the machine; the API stores only the public key. No shared secret
 is ever transmitted on connect.
 
 ### 2.1 Enrollment (one-time)
@@ -46,7 +46,7 @@ Content-Type: application/json
   "arch": "amd64", "agentVersion": "0.1.0" }
 ```
 
-- The control plane verifies the enroll token (SHA-256 hashed lookup, not expired, uses
+- The API verifies the enroll token (SHA-256 hashed lookup, not expired, uses
   remaining), creates the machine, stores the public key, and **spends one use** of the
   token. Response: `201 { "machineId": "m_…" }`.
 - One-time tokens (`uses: 1`) are consumed on first success; reusable fleet keys
@@ -101,7 +101,7 @@ Unknown top-level fields MUST be ignored by receivers (forward compatibility).
 
 ---
 
-## 4. Agent → control plane messages
+## 4. Agent → API messages
 
 ### `hello`
 Sent once, immediately after the socket opens.
@@ -116,13 +116,13 @@ Sent once, immediately after the socket opens.
 }
 ```
 
-- `actions` is the allowlist the agent supports, so the control plane can refuse to
+- `actions` is the allowlist the agent supports, so the API can refuse to
   enqueue actions an agent can't run.
 - No credential appears in `hello`; the device proved its identity by signing the
   connect JWT (§2.2).
 
 ### `heartbeat`
-Periodic liveness ping. **Default interval: 30 seconds.** The control plane marks a
+Periodic liveness ping. **Default interval: 30 seconds.** The API marks a
 machine offline if no heartbeat (or other message) arrives within **2.5×** the interval.
 
 ```json
@@ -189,10 +189,10 @@ Optional acknowledgement that a `job` was received and accepted for execution.
 
 ---
 
-## 5. Control plane → agent messages
+## 5. API → agent messages
 
 ### `job`
-Pushes a unit of work. **The control plane never sends a raw command.** It sends a named
+Pushes a unit of work. **The API never sends a raw command.** It sends a named
 `action` from the allowlist plus a validated, constrained `params` object. The mapping
 from action name to concrete commands lives entirely in the agent.
 
@@ -245,7 +245,7 @@ queued ──dispatch──► dispatched ──ack──► running ──resul
    └── agent offline at enqueue: stays queued until next connect
 ```
 
-- **queued** — accepted by the control plane; agent offline or not yet pushed.
+- **queued** — accepted by the API; agent offline or not yet pushed.
 - **dispatched** — `job` frame sent to the agent.
 - **running** — agent sent `ack` (or first `log`).
 - **succeeded / failed** — `result` received; `failed` when `exitCode != 0`.
@@ -273,7 +273,7 @@ rootless/user install (no sudo needed) or `/etc/outpost/hooks/` for the systemd
 system service. `run-hook` runs `<dir>/<name>`; `deploy` runs `<dir>/deploy` if it
 exists (falling back to the built-in PM2 flow). This is how arbitrary stacks
 (pip/supervisor, docker-compose, …) are supported **without ever sending a command
-string over the wire** — the control plane sends only the hook *name* (validated
+string over the wire** — the API sends only the hook *name* (validated
 `^[a-z0-9][a-z0-9_-]{0,63}$`); the commands live on the host. The **only** hard
 requirement is that the file is **not group/world-writable** (so other users can't
 tamper with it); the execute bit is optional — a non-executable script is run via
@@ -298,7 +298,7 @@ through a shell), so shell metacharacters are inert.
 - **Backward-compatible** changes (new optional fields, new message types that old peers
   ignore, new actions) do **not** bump the version.
 - **Breaking** changes (renaming/removing a field, changing semantics) bump `version`.
-  A peer that receives a `version` it cannot satisfy MUST refuse: the control plane
+  A peer that receives a `version` it cannot satisfy MUST refuse: the API
   closes with code `1002` (protocol error); the agent logs and reconnects, backing off.
 - Both sides advertise their max supported version implicitly via the `version` they
   send. Negotiation beyond "must match major" is out of scope for v1.
@@ -315,5 +315,5 @@ through a shell), so shell metacharacters are inert.
 | `4002` | replaced by a newer connection   | server    |
 
 On any unexpected close the agent reconnects with exponential backoff + jitter (see the
-agent implementation). The control plane keeps the machine's job queue durable across
+agent implementation). The API keeps the machine's job queue durable across
 disconnects.

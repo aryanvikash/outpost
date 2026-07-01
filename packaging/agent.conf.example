@@ -4,7 +4,7 @@
 # It holds NO secret — the device's secret is the private key at key_path (0600).
 # Location: /etc/outpost/agent.conf (mode 0600, owned by the outpost user).
 
-# Control-plane WebSocket endpoint (the /connect route on your Worker).
+# API WebSocket endpoint (the /connect route on your Worker).
 url=wss://outpost.example.com/connect
 
 # The machine id assigned at enrollment (returned by `outpost-agent add`).

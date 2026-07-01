@@ -499,7 +499,7 @@ app.route("/api", admin);
 app.route("/webhooks", webhooks);
 app.route("/webhooks", webhooksBitbucket);
 
-app.get("/", (c) => c.text("Outpost control plane — see /api (admin) and /connect (agents)\n"));
+app.get("/", (c) => c.text("Outpost API — see /api (admin) and /connect (agents)\n"));
 
 // ---------------------------------------------------------------------------
 

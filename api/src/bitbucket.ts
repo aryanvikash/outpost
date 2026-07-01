@@ -15,7 +15,7 @@
 import { verifyWebhookSignature } from "./github-app";
 
 const DEFAULT_API_BASE = "https://api.bitbucket.org/2.0";
-const UA = "outpost-control-plane";
+const UA = "outpost-api";
 
 /**
  * Verify a Bitbucket webhook delivery. Bitbucket Cloud (and Server/DC) send

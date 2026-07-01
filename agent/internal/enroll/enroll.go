@@ -1,5 +1,5 @@
 // Package enroll performs first-time device registration: it presents a
-// one-time enroll token and the device's PUBLIC key to the control plane, which
+// one-time enroll token and the device's PUBLIC key to the API, which
 // records the machine and returns its machineId. The private key never leaves
 // the device.
 package enroll

@@ -10,7 +10,7 @@
 #
 # Environment:
 #   OUTPOST_VERSION      pin a version (e.g. v0.1.0); default: latest
-#   OUTPOST_URL          control-plane wss URL       (else prompted)
+#   OUTPOST_URL          API wss URL       (else prompted)
 #   OUTPOST_ENROLL_TOKEN one-time enroll token oet_… (else prompted)
 #   OUTPOST_NAME         optional machine name (defaults to hostname)
 #   OUTPOST_RUN_USER     user the agent runs as (default: the sudo-invoking user)
@@ -134,7 +134,7 @@ fi
 URL="${OUTPOST_URL:-}"
 ENROLL_TOKEN="${OUTPOST_ENROLL_TOKEN:-}"
 NAME="${OUTPOST_NAME:-}"
-if [ -z "$URL" ] && [ -t 0 ]; then printf "Control-plane URL (wss://...): "; read -r URL; fi
+if [ -z "$URL" ] && [ -t 0 ]; then printf "API URL (wss://...): "; read -r URL; fi
 if [ -z "$ENROLL_TOKEN" ] && [ -t 0 ]; then printf "Enroll token (oet_...): "; read -r ENROLL_TOKEN; fi
 
 # Run user: the agent runs as a REAL login user so deploy hooks can reach that

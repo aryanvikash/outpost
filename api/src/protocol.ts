@@ -10,7 +10,7 @@ export const MAX_MESSAGE_BYTES = 1024 * 1024;
 
 export type LogStream = "stdout" | "stderr";
 
-// --- Agent → control plane ---------------------------------------------------
+// --- Agent → API ---------------------------------------------------
 
 export interface DeployConfig {
   appDir: string;
@@ -82,7 +82,7 @@ export type AgentMessage =
   | ResultMessage
   | AckMessage;
 
-// --- Control plane → agent ---------------------------------------------------
+// --- API → agent ---------------------------------------------------
 
 export interface JobMessage {
   type: "job";

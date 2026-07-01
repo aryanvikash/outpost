@@ -14,8 +14,8 @@ import (
 )
 
 // Host-defined hooks let an operator add custom commands (deploy recipes,
-// "pull", "migrate", …) WITHOUT the control plane ever sending a command string.
-// The operator drops a script in the hooks dir; the control plane triggers it by
+// "pull", "migrate", …) WITHOUT the API ever sending a command string.
+// The operator drops a script in the hooks dir; the API triggers it by
 // validated name. The only hard requirement is that the file is not group/world-
 // writable, so another user on the box can't tamper with what runs. The execute
 // bit is optional — a non-executable script is run via `sh` — so dropping a file
