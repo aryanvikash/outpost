@@ -174,7 +174,7 @@ export function BindingsCard() {
         <span className="text-xs text-muted-foreground/80">push to repo+branch → run action</span>
       </CardHeader>
       <CardContent className="space-y-4">
-        <AddBindingForm machines={machines.data ?? []} />
+        <AddBindingForm machines={(machines.data ?? []).filter((m) => !m.revoked)} />
  
         <div className="space-y-2.5">
           {bindings.data?.map((b) => (
