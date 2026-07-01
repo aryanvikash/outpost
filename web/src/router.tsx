@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { LoginPage } from "./routes/login";
 import { DashboardPage } from "./routes/dashboard";
+import { MachineDetailPage } from "./routes/machine";
 import { JobPage } from "./routes/job";
 import { ConnectionsPage } from "./routes/connections";
 import { WebhookLogPage } from "./routes/webhook-log";
@@ -59,11 +60,15 @@ const loginRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  validateSearch: (s: Record<string, unknown>): { machine?: string } => ({
-    machine: typeof s.machine === "string" ? s.machine : undefined,
-  }),
   beforeLoad: requireAuth,
   component: DashboardPage,
+});
+
+const machineRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/machines/$machineId",
+  beforeLoad: requireAuth,
+  component: MachineDetailPage,
 });
 
 const jobRoute = createRoute({
@@ -111,6 +116,7 @@ const settingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   dashboardRoute,
+  machineRoute,
   jobRoute,
   connectionsRoute,
   webhookLogRoute,
