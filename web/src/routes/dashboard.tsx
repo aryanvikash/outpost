@@ -52,6 +52,22 @@ function statusVariant(s: string): "success" | "danger" | "default" {
   if (["failed", "timed_out", "interrupted", "canceled"].includes(s)) return "danger";
   return "default";
 }
+function CopyIconBtn({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className="text-muted-foreground hover:text-primary transition-colors p-1 rounded-md hover:bg-secondary/40"
+      title="Copy"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
 
 export function DashboardPage() {
   const navigate = useNavigate({ from: "/" });
@@ -81,15 +97,15 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[360px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Machines</CardTitle>
-            <Button size="sm" onClick={() => setEnrollOpen(true)}>
-              <Plus /> Enroll
+      <div className="grid items-start gap-6 lg:grid-cols-[360px_1fr]">
+        <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <CardTitle className="text-lg">Machines</CardTitle>
+            <Button size="sm" onClick={() => setEnrollOpen(true)} className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 transition-all">
+              <Plus className="mr-1 h-4 w-4" /> Add Machine
             </Button>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-2.5">
             {machines.isLoading && (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Loading…
@@ -107,11 +123,14 @@ export function DashboardPage() {
               />
             ))}
             {!machines.isLoading && visible.length === 0 && (
-              <div className="grid place-items-center gap-2 py-10 text-center text-muted-foreground">
-                <Server className="h-7 w-7 opacity-50" />
-                <p className="text-sm">No machines yet.</p>
-                <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
-                  <Plus /> Enroll your first
+              <div className="grid place-items-center gap-3 py-12 text-center text-muted-foreground">
+                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 opacity-80">
+                  <rect x="8" y="8" width="48" height="48" rx="12" className="fill-primary/5 stroke-primary/30" strokeWidth="1.5" strokeDasharray="4 4"/>
+                  <path d="M32 24V40 M24 32H40" className="stroke-primary/70" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                <p className="text-sm font-medium">No machines connected yet.</p>
+                <Button size="sm" variant="default" className="mt-2 bg-primary/10 text-primary hover:bg-primary/20" onClick={() => setEnrollOpen(true)}>
+                  <Plus className="mr-1 h-4 w-4" /> Add your first machine
                 </Button>
               </div>
             )}
@@ -130,11 +149,17 @@ export function DashboardPage() {
             machineId={selected}
           />
         ) : (
-          <Card>
-            <CardContent className="grid min-h-[320px] place-items-center p-6 text-center text-muted-foreground">
-              <div>
-                <RadioTower className="mx-auto mb-3 h-8 w-8 opacity-40" />
-                <p className="text-sm">Select a machine to run jobs and view history.</p>
+          <Card className="border-white/5 bg-card/20 backdrop-blur-xl">
+            <CardContent className="grid min-h-[400px] place-items-center p-6 text-center text-muted-foreground">
+              <div className="flex flex-col items-center">
+                <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-6 opacity-80">
+                  <rect x="20" y="20" width="80" height="80" rx="24" className="fill-primary/5 stroke-primary/20" strokeWidth="1.5" strokeDasharray="6 6"/>
+                  <circle cx="60" cy="60" r="16" className="fill-primary/10 stroke-primary/40" strokeWidth="1.5"/>
+                  <circle cx="60" cy="60" r="4" className="fill-primary/60"/>
+                  <path d="M60 30L60 40 M60 80L60 90 M30 60L40 60 M80 60L90 60" className="stroke-primary/50" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                <h3 className="mb-2 text-lg font-semibold text-foreground/90">Awaiting Selection</h3>
+                <p className="text-sm text-muted-foreground/80 max-w-[260px] leading-relaxed">Select a machine from the list to view its details, run jobs, and check history.</p>
               </div>
             </CardContent>
           </Card>
@@ -148,11 +173,11 @@ export function DashboardPage() {
 
 function Stat({ label, value, live }: { label: string; value: number; live?: boolean }) {
   return (
-    <div className="flex items-baseline gap-2 rounded-lg border border-border bg-card px-3.5 py-2">
-      <span className={cn("text-base font-semibold tabular-nums", live && value > 0 && "text-emerald-400")}>
+    <div className="flex items-baseline gap-2 rounded-xl border border-white/5 bg-card/40 px-4 py-2 backdrop-blur-md shadow-sm">
+      <span className={cn("text-lg font-bold tabular-nums", live && value > 0 && "text-primary drop-shadow-[0_0_8px_rgba(var(--primary),0.4)]")}>
         {value}
       </span>
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium text-muted-foreground/80">{label}</span>
     </div>
   );
 }
@@ -170,16 +195,16 @@ function MachineRow({
     <button
       onClick={onSelect}
       className={cn(
-        "flex w-full flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-3.5 text-left transition-colors hover:border-border/80 hover:bg-accent",
-        selected && "border-primary bg-primary/10 hover:bg-primary/10",
+        "flex w-full flex-col gap-2 rounded-xl border border-white/5 bg-secondary/20 p-4 text-left transition-all hover:bg-secondary/40 hover:shadow-md",
+        selected && "border-primary/40 bg-primary/10 shadow-[0_4px_20px_-4px_rgba(var(--primary),0.2)] hover:bg-primary/15",
       )}
     >
       <div className="flex items-center gap-2.5">
         <span
           className={cn(
-            "h-2 w-2 rounded-full",
+            "h-2.5 w-2.5 rounded-full transition-all duration-500",
             m.status === "online"
-              ? "bg-emerald-400 shadow-[0_0_0_3px] shadow-emerald-400/20"
+              ? "bg-primary shadow-[0_0_12px_2px] shadow-primary/50"
               : "bg-muted-foreground/40",
           )}
         />
@@ -250,8 +275,8 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
   });
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-6">
         <div className="min-w-0">
           {editing ? (
             <form
@@ -276,11 +301,19 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
               </Button>
             </form>
           ) : (
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-base">{machine?.name ?? "Machine"}</CardTitle>
+            <div className="flex items-center gap-3">
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full transition-all duration-500",
+                  machine?.status === "online"
+                    ? "bg-primary shadow-[0_0_12px_2px] shadow-primary/50"
+                    : "bg-muted-foreground/40",
+                )}
+              />
+              <CardTitle className="text-lg font-bold">{machine?.name ?? "Machine"}</CardTitle>
               <button
                 title="Rename"
-                className="text-muted-foreground transition-colors hover:text-foreground"
+                className="text-muted-foreground hover:text-primary transition-colors p-1 rounded-md hover:bg-secondary/40"
                 onClick={() => {
                   setDraft(machine?.name ?? "");
                   setEditing(true);
@@ -290,8 +323,9 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
               </button>
             </div>
           )}
-          <div className="mt-0.5 flex items-center gap-2">
+          <div className="mt-0.5 flex items-center gap-1.5">
             <code className="font-mono text-[11px] text-muted-foreground">{machineId}</code>
+            <CopyIconBtn value={machineId} />
             {machine?.agentVersion && (
               <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
                 agent {machine.agentVersion}
@@ -300,53 +334,64 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
           </div>
         </div>
         <Button
-          variant="destructive"
+          variant="ghost"
           size="sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           onClick={() => {
             if (confirm("Revoke this device? It won't be able to reconnect.")) revoke.mutate();
           }}
         >
-          <Trash2 /> Revoke
+          <Trash2 className="mr-1.5 h-4 w-4" /> Revoke
         </Button>
       </CardHeader>
       <CardContent>
         {machine?.deploy && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-xs">
-            <span className="font-medium text-foreground/80">deploy</span>
-            <Badge variant="outline">{machine.deploy.mode ?? "pm2"}</Badge>
-            {machine.deploy.mode === "hook" ? (
-              <code className="font-mono text-primary">{machine.deploy.hookPath}</code>
-            ) : machine.deploy.repoUrl ? (
-              <code className="font-mono text-primary">{machine.deploy.repoUrl}</code>
-            ) : (
-              <span className="text-amber-400">no git repo at {machine.deploy.appDir}</span>
-            )}
-            <span className="text-muted-foreground/70">
-              {" · "}
-              {machine.deploy.appDir}
-              {machine.deploy.mode !== "hook" && ` · pm2 ${machine.deploy.pm2Target}`}
-            </span>
+          <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-xl border border-white/5 bg-secondary/10 flex flex-col gap-1 shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground/80 tracking-wider">Mode</span>
+              <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                {machine.deploy.mode ?? "pm2"}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl border border-white/5 bg-secondary/10 flex flex-col gap-1 sm:col-span-2 shadow-sm truncate">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground/80 tracking-wider">
+                {machine.deploy.mode === "hook" ? "Hook Path" : "Git Repository"}
+              </span>
+              <span className="text-xs font-mono text-primary truncate">
+                {machine.deploy.mode === "hook" 
+                  ? machine.deploy.hookPath 
+                  : machine.deploy.repoUrl || <span className="text-destructive font-sans font-semibold">No git repo at app directory</span>}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl border border-white/5 bg-secondary/10 flex flex-col gap-1 sm:col-span-3 shadow-sm truncate">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground/80 tracking-wider">App Directory</span>
+              <span className="text-xs font-mono text-foreground/80 truncate">
+                {machine.deploy.appDir}
+                {machine.deploy.mode !== "hook" && ` · pm2 ${machine.deploy.pm2Target}`}
+              </span>
+            </div>
           </div>
         )}
         {machine && machine.hookIssues.length > 0 && (
-          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs">
-            <p className="mb-1.5 flex items-center gap-1.5 font-medium text-amber-400">
+          <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-xs shadow-sm backdrop-blur-sm">
+            <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-destructive">
               <AlertTriangle className="h-3.5 w-3.5" />
               {machine.hookIssues.length} hook
               {machine.hookIssues.length > 1 ? "s" : ""} found but not runnable
             </p>
-            <ul className="space-y-0.5 text-amber-200/80">
+            <ul className="space-y-1 text-destructive/80">
               {machine.hookIssues.map((h) => (
                 <li key={h.name}>
-                  <code className="font-mono text-amber-300">{h.name}</code> — {h.reason}
+                  <code className="font-mono text-destructive">{h.name}</code> — {h.reason}
                 </li>
               ))}
             </ul>
           </div>
         )}
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center p-4 rounded-xl border border-white/5 bg-secondary/10 mt-2">
           <Select value={action} onValueChange={setAction}>
-            <SelectTrigger className="sm:w-[150px]">
+            <SelectTrigger className="sm:w-[160px] bg-card/50 border-white/10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -358,68 +403,79 @@ function MachinePanel({ machine, machineId }: { machine?: Machine; machineId: st
             </SelectContent>
           </Select>
           {action === "deploy" && (
-            <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="branch" />
+            <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="branch" className="bg-card/50 border-white/10" />
           )}
           {action === "restart" && (
-            <Input value={app} onChange={(e) => setApp(e.target.value)} placeholder="app (optional)" />
+            <Input value={app} onChange={(e) => setApp(e.target.value)} placeholder="app (optional)" className="bg-card/50 border-white/10" />
           )}
-          <Button onClick={() => enqueue.mutate()} disabled={enqueue.isPending} className="sm:ml-auto">
-            {enqueue.isPending ? <Loader2 className="animate-spin" /> : <Play />}
-            Enqueue
+          <Button onClick={() => enqueue.mutate()} disabled={enqueue.isPending} className="sm:ml-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(var(--primary),0.3)] transition-all">
+            {enqueue.isPending ? <Loader2 className="animate-spin mr-1.5 h-4 w-4" /> : <Play className="mr-1.5 h-4 w-4 fill-current" />}
+            Run Action
           </Button>
         </div>
-        {enqueue.isError && <p className="mt-2 text-sm text-red-400">{(enqueue.error as Error).message}</p>}
+        {enqueue.isError && <p className="mt-3 text-sm font-medium text-destructive">{(enqueue.error as Error).message}</p>}
         {lastJob && !enqueue.isError && (
-          <p className="mt-2 flex items-center gap-2 text-sm text-emerald-400">
-            <Check className="h-4 w-4" /> queued{" "}
-            <Link to="/jobs/$jobId" params={{ jobId: lastJob }} className="font-mono underline-offset-2 hover:underline">
+          <p className="mt-3 flex items-center gap-2 text-sm font-medium text-primary">
+            <Check className="h-4 w-4" /> triggered{" "}
+            <Link to="/jobs/$jobId" params={{ jobId: lastJob }} className="font-mono underline-offset-4 hover:underline">
               {lastJob}
             </Link>
           </p>
         )}
 
         {machine && machine.hooks.length > 0 && (
-          <div className="mt-5">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-              Custom commands
-            </p>
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-8">
+            <div className="flex items-center gap-2 mb-3">
+              <Terminal className="h-4 w-4 text-primary" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+                Custom commands
+              </h4>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
               {machine.hooks.map((h) => (
                 <Button
                   key={h}
                   variant="outline"
                   size="sm"
+                  className="bg-secondary/20 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all shadow-sm"
                   onClick={() => runHookMut.mutate(h)}
                   disabled={runHookMut.isPending}
                 >
-                  <Terminal /> {h}
+                  <Play className="mr-1.5 h-3.5 w-3.5" /> {h}
                 </Button>
               ))}
             </div>
           </div>
         )}
 
-        <p className="mb-1 mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-          Recent jobs
-        </p>
-        <div className="divide-y divide-border/60">
+        <div className="mt-8 mb-3 flex items-center gap-2">
+          <ScrollText className="h-4 w-4 text-primary" />
+          <h4 className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+            Recent jobs
+          </h4>
+        </div>
+        <div className="space-y-2.5">
           {jobs.data?.map((j) => (
             <div
               key={j.id}
-              className="grid grid-cols-[100px_1fr_auto_auto] items-center gap-3 py-2.5"
+              className="grid grid-cols-[100px_1fr_auto_auto] items-center gap-4 rounded-xl border border-white/5 bg-secondary/10 p-3 hover:bg-secondary/20 transition-all shadow-sm"
             >
-              <Badge variant={statusVariant(j.status)}>{j.status}</Badge>
-              <span className="font-medium">{j.action}</span>
-              <span className="text-xs text-muted-foreground/70">{timeAgo(j.createdAt)}</span>
-              <Button asChild variant="outline" size="sm">
+              <Badge variant={statusVariant(j.status)} className={cn("justify-center", j.status === 'succeeded' && "bg-primary/15 text-primary border-0 hover:bg-primary/25")}>
+                {j.status}
+              </Badge>
+              <span className="font-medium text-sm">{j.action}</span>
+              <span className="text-xs font-medium text-muted-foreground/70">{timeAgo(j.createdAt)}</span>
+              <Button asChild variant="outline" size="sm" className="bg-card/50 border-white/5 hover:bg-primary/10 hover:text-primary transition-colors h-8">
                 <Link to="/jobs/$jobId" params={{ jobId: j.id }}>
-                  <ScrollText /> Logs
+                  Logs
                 </Link>
               </Button>
             </div>
           ))}
           {jobs.data?.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">No jobs yet.</p>
+            <div className="rounded-xl border border-white/5 bg-secondary/10 py-8 text-center text-sm text-muted-foreground">
+              No jobs yet.
+            </div>
           )}
         </div>
       </CardContent>
@@ -460,11 +516,11 @@ function EnrollDialog({
     <Dialog open={open} onOpenChange={close}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Enroll a machine</DialogTitle>
+          <DialogTitle>Add a machine</DialogTitle>
           <DialogDescription>
             {result
               ? "Run this on the new server. The token is one-time and shown once."
-              : "Mint a one-time enroll token (valid 60 minutes)."}
+              : "Generate a one-time connect token (valid 60 minutes)."}
           </DialogDescription>
         </DialogHeader>
 
@@ -473,33 +529,48 @@ function EnrollDialog({
             <Button variant="ghost" onClick={() => close(false)}>
               Cancel
             </Button>
-            <Button onClick={() => create.mutate()} disabled={create.isPending}>
-              {create.isPending && <Loader2 className="animate-spin" />}
-              Mint token
+            <Button onClick={() => create.mutate()} disabled={create.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              {create.isPending && <Loader2 className="animate-spin mr-1.5 h-4 w-4" />}
+              Generate token
             </Button>
           </div>
         ) : (
           <>
-            <pre className="overflow-x-auto rounded-lg border border-border bg-black/40 p-3.5 font-mono text-xs leading-relaxed text-muted-foreground">
-              {installCmd}
-            </pre>
-            <div className="flex justify-end gap-2">
+            <div className="relative group">
+              <pre className="whitespace-pre-wrap break-all rounded-xl border border-white/5 bg-secondary/20 p-4 pr-12 font-mono text-xs leading-relaxed text-primary/95 shadow-inner">
+                {installCmd}
+              </pre>
               <Button
-                variant="outline"
+                size="icon"
+                variant="ghost"
+                className="absolute top-3.5 right-3.5 h-8 w-8 text-muted-foreground hover:bg-secondary/40 hover:text-primary opacity-70 group-hover:opacity-100 transition-all"
                 onClick={() => {
                   navigator.clipboard.writeText(installCmd);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 1500);
                 }}
               >
-                {copied ? <Check /> : <Copy />}
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+            <div className="flex justify-end gap-2.5 mt-2">
+              <Button
+                variant="outline"
+                className="bg-secondary/20 border-white/5 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all"
+                onClick={() => {
+                  navigator.clipboard.writeText(installCmd);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+              >
+                {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
                 {copied ? "Copied" : "Copy command"}
               </Button>
-              <Button onClick={() => close(false)}>Done</Button>
+              <Button onClick={() => close(false)} className="bg-primary hover:bg-primary/95 text-primary-foreground shadow-[0_0_15px_rgba(var(--primary),0.35)] transition-all font-semibold">Done</Button>
             </div>
           </>
         )}
-        {create.isError && <p className="text-sm text-red-400">{(create.error as Error).message}</p>}
+        {create.isError && <p className="text-sm text-destructive font-semibold">{(create.error as Error).message}</p>}
       </DialogContent>
     </Dialog>
   );

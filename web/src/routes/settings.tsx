@@ -24,50 +24,51 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <Card>
+      <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Link2 className="h-4 w-4" /> Connection
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Link2 className="h-5 w-5 text-primary" /> Connection
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           <Field label="API base URL" value={apiBase() || "not set"} />
           <Field label="Agent connect URL" value={connectWssUrl()} />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Webhook className="h-4 w-4" /> Webhook endpoints
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Webhook className="h-5 w-5 text-primary" /> Webhook endpoints
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           <Field label="GitHub" value={webhookUrl()} />
           <Field label="Bitbucket" value={bitbucketWebhookUrl()} />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Radio className="h-4 w-4" /> Session
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Radio className="h-5 w-5 text-primary" /> Session
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="mb-3 text-sm text-muted-foreground">
+          <p className="mb-4 text-sm text-muted-foreground/90 leading-relaxed">
             You're signed in with a short-lived admin session token stored in this
             browser.
           </p>
           <Button
-            variant="destructive"
+            variant="ghost"
             size="sm"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={() => {
               clearToken();
               navigate({ to: "/login" });
             }}
           >
-            <LogOut /> Sign out
+            <LogOut className="mr-1.5 h-4 w-4" /> Sign out
           </Button>
         </CardContent>
       </Card>
@@ -78,11 +79,11 @@ export function SettingsPage() {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
         {label}
       </p>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 overflow-x-auto rounded-md border border-border bg-black/40 px-3 py-2 font-mono text-xs">
+      <div className="flex items-center gap-3 p-1.5 rounded-xl border border-white/5 bg-secondary/10">
+        <code className="flex-1 overflow-x-auto px-3 py-2 font-mono text-xs text-primary bg-card/25 rounded-lg border border-white/5">
           {value}
         </code>
         <CopyButton value={value} />
