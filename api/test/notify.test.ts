@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import type { Env } from "../src/env";
-import { buildAlert, sendAlert, type AlertEvent } from "../src/notify";
+import {
+  buildAlert,
+  sendAlert,
+  alertEventsFromConfig,
+  type AlertEvent,
+} from "../src/notify";
 
 const event: AlertEvent = {
   type: "job_failed",
@@ -19,18 +23,18 @@ describe("alert notifier", () => {
     expect(buildAlert(event)).toEqual({ source: "outpost", ...event });
   });
 
-  it("is a no-op when ALERT_WEBHOOK_URL is unset", async () => {
+  it("is a no-op (returns false) when the URL is empty", async () => {
     const spy = vi.spyOn(globalThis, "fetch");
-    await sendAlert({} as Env, event);
+    expect(await sendAlert("", event)).toBe(false);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("posts JSON to the configured URL", async () => {
+  it("posts JSON to the configured URL and reports delivery", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(null, { status: 200 }));
     const url = "https://hooks.example.com/alert";
-    await sendAlert({ ALERT_WEBHOOK_URL: url } as Env, event);
+    expect(await sendAlert(url, event)).toBe(true);
 
     expect(spy).toHaveBeenCalledOnce();
     const [calledUrl, init] = spy.mock.calls[0] as [string, RequestInit];
@@ -43,10 +47,17 @@ describe("alert notifier", () => {
     });
   });
 
-  it("never throws when the webhook fails", async () => {
+  it("returns false (never throws) when the webhook fails", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
-    await expect(
-      sendAlert({ ALERT_WEBHOOK_URL: "https://x.test" } as Env, event),
-    ).resolves.toBeUndefined();
+    expect(await sendAlert("https://x.test", event)).toBe(false);
+  });
+
+  it("parses event toggles, defaulting to enabled", () => {
+    expect(alertEventsFromConfig(null)).toEqual({ machine_offline: true, job_failed: true });
+    expect(alertEventsFromConfig('{"job_failed":false}')).toEqual({
+      machine_offline: true,
+      job_failed: false,
+    });
+    expect(alertEventsFromConfig("garbage")).toEqual({ machine_offline: true, job_failed: true });
   });
 });

@@ -14,17 +14,18 @@ import type { Context, Next } from "hono";
 import type { Env } from "./env";
 import { signAdminJwt, verifyAdminJwt } from "./admin-auth";
 import { retentionDays, webhookDedupRetentionDays } from "./env";
-import { DB } from "./db/index";
+import { DB, type TriggerTarget } from "./db/index";
 import {
   generateId,
   generateToken,
   sha256Hex,
   timingSafeEqual,
 } from "./crypto";
-import { isKnownAction } from "./actions";
+import { isKnownAction, ACTIONS } from "./actions";
 import { enqueueJob, machineStub } from "./enqueue";
 import { webhooks } from "./webhooks";
 import { webhooksBitbucket } from "./webhooks-bitbucket";
+import { triggerHooks } from "./triggers";
 import {
   jwtMachineId,
   verifyConnectJwt,
@@ -408,6 +409,7 @@ admin.get("/webhooks/deliveries", async (c) => {
       id: d.id,
       ts: d.ts,
       event: d.event,
+      provider: d.provider,
       repo: d.repo,
       branch: d.branch,
       sha: d.sha,
@@ -492,12 +494,126 @@ admin.post("/jobs/:id/cancel", async (c) => {
   return c.json({ requested: true });
 });
 
+// --- trigger hooks ----------------------------------------------------------
+
+/**
+ * Create a trigger hook that fans out to one or more targets (machine + action).
+ * Returns the secret URL once. Hitting the URL fires every target.
+ */
+admin.post("/triggers", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    label?: string;
+    targets?: Array<{ machineId?: string; action?: string; params?: Record<string, unknown> }>;
+  };
+  const rawTargets = Array.isArray(body.targets) ? body.targets : [];
+  if (rawTargets.length === 0) return c.json({ error: "at least one target required" }, 400);
+
+  const db = new DB(c.env.DB);
+  const targets: TriggerTarget[] = [];
+  for (const t of rawTargets) {
+    const machineId = (t.machineId ?? "").trim();
+    const action = (t.action ?? "").trim();
+    const params = t.params ?? {};
+    if (!machineId || !action) return c.json({ error: "each target needs machineId and action" }, 400);
+    if (!isKnownAction(action)) return c.json({ error: `unknown action: ${action}` }, 400);
+    const invalid = ACTIONS[action].validate(params);
+    if (invalid) return c.json({ error: invalid }, 400);
+    if (!(await db.getMachine(machineId))) return c.json({ error: `machine not found: ${machineId}` }, 404);
+    targets.push({ machineId, action, params });
+  }
+
+  const id = generateId("th");
+  const token = generateToken("oth");
+  const now = Date.now();
+  await db.insertTrigger({
+    id,
+    tokenHash: await sha256Hex(token),
+    label: (body.label ?? "").trim() || null,
+    targetsJson: JSON.stringify(targets),
+    createdBy: adminActor(c),
+    createdAt: now,
+  });
+  await db.audit({ ts: now, actor: adminActor(c), action: "trigger.create", target: id, detail: { targets: targets.length } });
+
+  const url = `${new URL(c.req.url).origin}/hooks/${token}`;
+  return c.json({ id, token, url }, 201);
+});
+
+admin.get("/triggers", async (c) => {
+  const db = new DB(c.env.DB);
+  const rows = await db.listTriggers();
+  return c.json({
+    triggers: rows.map((t) => ({
+      id: t.id,
+      label: t.label,
+      targets: safeTargets(t.targets_json),
+      createdAt: t.created_at,
+      lastUsedAt: t.last_used_at,
+    })),
+  });
+});
+
+admin.delete("/triggers/:id", async (c) => {
+  const db = new DB(c.env.DB);
+  const id = c.req.param("id");
+  await db.deleteTrigger(id);
+  await db.audit({ ts: Date.now(), actor: adminActor(c), action: "trigger.delete", target: id });
+  return c.json({ deleted: true });
+});
+
+// --- alerts -----------------------------------------------------------------
+
+admin.get("/alerts", async (c) => {
+  const db = new DB(c.env.DB);
+  const rows = await db.listAlerts(50);
+  return c.json({
+    alerts: rows.map((a) => ({
+      id: a.id,
+      ts: a.ts,
+      type: a.type,
+      machineId: a.machine_id,
+      jobId: a.job_id,
+      status: a.status,
+      detail: a.detail,
+      delivered: a.delivered === 1,
+    })),
+  });
+});
+
+admin.get("/alerts/config", async (c) => {
+  const db = new DB(c.env.DB);
+  const webhookUrl = (await db.getConfig("alert_webhook_url")) ?? c.env.ALERT_WEBHOOK_URL ?? "";
+  const events = parseEvents(await db.getConfig("alert_events"));
+  return c.json({ webhookUrl, events });
+});
+
+admin.put("/alerts/config", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    webhookUrl?: string;
+    events?: { machine_offline?: boolean; job_failed?: boolean };
+  };
+  const db = new DB(c.env.DB);
+  await db.setConfig("alert_webhook_url", (body.webhookUrl ?? "").trim() || null);
+  await db.setConfig(
+    "alert_events",
+    JSON.stringify({
+      machine_offline: body.events?.machine_offline ?? true,
+      job_failed: body.events?.job_failed ?? true,
+    }),
+  );
+  await db.audit({ ts: Date.now(), actor: adminActor(c), action: "alerts.config" });
+  return c.json({ ok: true });
+});
+
 app.route("/api", admin);
 
 // Webhook deliveries (self-authenticating via HMAC signature). Both providers
 // mount under /webhooks: GitHub at /webhooks/github, Bitbucket at /webhooks/bitbucket.
 app.route("/webhooks", webhooks);
 app.route("/webhooks", webhooksBitbucket);
+
+// Trigger hooks (self-authenticating via the secret token in the URL).
+app.route("/hooks", triggerHooks);
 
 app.get("/", (c) => c.text("Outpost API — see /api (admin) and /connect (agents)\n"));
 
@@ -511,6 +627,32 @@ function bearer(header: string | undefined): string | null {
 
 function adminActor(c: Context<AppCtx>): string {
   return c.req.header("X-Outpost-Admin") ?? "admin";
+}
+
+/** Parse a trigger's stored targets, tolerating malformed data. */
+function safeTargets(json: string): TriggerTarget[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? (v as TriggerTarget[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Parse the stored alert_events JSON, defaulting both event types to enabled. */
+function parseEvents(json: string | null): {
+  machine_offline: boolean;
+  job_failed: boolean;
+} {
+  try {
+    const v = json ? (JSON.parse(json) as Record<string, unknown>) : {};
+    return {
+      machine_offline: v.machine_offline !== false,
+      job_failed: v.job_failed !== false,
+    };
+  } catch {
+    return { machine_offline: true, job_failed: true };
+  }
 }
 
 /** True if the token is the static admin token or a valid admin session JWT. */
