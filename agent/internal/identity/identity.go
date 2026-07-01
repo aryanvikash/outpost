@@ -1,9 +1,9 @@
 // Package identity manages the device's Ed25519 keypair.
 //
-// The private key is generated ON the device and never leaves it. The control
-// plane stores only the public key (registered at enrollment). On every connect
+// The private key is generated ON the device and never leaves it. The API
+// stores only the public key (registered at enrollment). On every connect
 // the agent proves its identity by signing a short-lived EdDSA JWT, which the
-// control plane verifies against the stored public key — no shared secret ever
+// API verifies against the stored public key — no shared secret ever
 // crosses the wire.
 package identity
 
@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// ConnectAudience must match the control plane's expected audience.
+// ConnectAudience must match the API's expected audience.
 const ConnectAudience = "outpost-connect"
 
 // Identity wraps a device private key.
@@ -73,7 +73,7 @@ func Save(id *Identity, path string) error {
 }
 
 // PublicKeyBase64 returns the base64 (std) of the 32-byte public key, as sent
-// to the control plane at enrollment.
+// to the API at enrollment.
 func (id *Identity) PublicKeyBase64() string {
 	pub := id.priv.Public().(ed25519.PublicKey)
 	return base64.StdEncoding.EncodeToString(pub)

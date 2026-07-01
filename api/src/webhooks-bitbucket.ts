@@ -11,7 +11,7 @@
 // the job to carry Bitbucket context (workspace/repo + provider) so the Durable
 // Object can call setBuildStatus() on completion, the way the GitHub path uses
 // gh_installation_id. The poster (./bitbucket.ts setBuildStatus) is ready for
-// that follow-up. See control-plane/README.md.
+// that follow-up. See api/README.md.
 
 import { Hono } from "hono";
 import type { Env } from "./env";

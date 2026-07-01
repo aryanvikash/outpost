@@ -1,7 +1,7 @@
 # Outpost Agent
 
 The **agent** is a single static **Go** binary installed on each managed server.
-It dials **outbound** over WebSocket Secure to the [control plane](../control-plane),
+It dials **outbound** over WebSocket Secure to the [API](../api),
 executes jobs from a **fixed allowlist of named actions** (never arbitrary shell),
 streams logs back, and reports an exit status. It never listens for inbound
 connections — so the managed box can keep every inbound port closed, including 22.
@@ -60,7 +60,7 @@ variables take precedence over the file.
 
 | variable | default | purpose |
 |----------|---------|---------|
-| `OUTPOST_URL` | — (required) | control-plane connect URL (`wss://host/connect`) |
+| `OUTPOST_URL` | — (required) | API connect URL (`wss://host/connect`) |
 | `OUTPOST_MACHINE_ID` | from config | this device's machine id (`m_…`) |
 | `OUTPOST_KEY_PATH` | next to config | path to the device private key |
 | `OUTPOST_APP_DIR` | `/srv/app` | git working tree for the built-in deploy |
@@ -107,7 +107,7 @@ outpost-agent hook edit deploy      # creates a template + opens $EDITOR; no sud
 
 ## Identity & security
 
-- Each device generates its own **Ed25519 keypair on the box**; the control plane
+- Each device generates its own **Ed25519 keypair on the box**; the API
   stores only the public key. The private key (`0600`) never leaves the machine.
 - Enrollment is authorized once by a short-lived enroll token (`oet_…`).
 - Every connection authenticates on the HTTP upgrade with a short-lived **EdDSA

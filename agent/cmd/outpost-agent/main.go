@@ -1,5 +1,5 @@
 // Command outpost-agent is the Outpost agent: a single static binary installed
-// on a managed server. It dials OUT to the control plane over wss and executes
+// on a managed server. It dials OUT to the API over wss and executes
 // allowlisted actions. It never listens for inbound connections.
 //
 // Usage:
@@ -152,7 +152,7 @@ func runUninstall(args []string) error {
 		fmt.Printf("IMPORTANT: revoke this device so its key can't reconnect:\n")
 		fmt.Printf("  dashboard → machine %s → Revoke  (or POST /api/machines/%s/revoke)\n", machineID, machineID)
 	} else {
-		fmt.Println("IMPORTANT: revoke this device in the control plane (dashboard → Revoke).")
+		fmt.Println("IMPORTANT: revoke this device in the API (dashboard → Revoke).")
 	}
 	return nil
 }
@@ -239,11 +239,11 @@ func firstNonEmpty(vals ...string) string {
 }
 
 // runAdd implements `outpost-agent add`: generate a device keypair, register the
-// public key with the control plane using a one-time enroll token, and persist
+// public key with the API using a one-time enroll token, and persist
 // the key + config. The private key never leaves this machine.
 func runAdd(args []string) error {
 	fs := flag.NewFlagSet("add", flag.ExitOnError)
-	url := fs.String("url", os.Getenv("OUTPOST_URL"), "control-plane connect URL (wss://host/connect)")
+	url := fs.String("url", os.Getenv("OUTPOST_URL"), "API connect URL (wss://host/connect)")
 	token := fs.String("token", os.Getenv("OUTPOST_ENROLL_TOKEN"), "one-time enroll token (oet_...)")
 	name := fs.String("name", os.Getenv("OUTPOST_NAME"), "machine name (defaults to hostname)")
 	configPath := fs.String("config", config.DefaultPath, "where to write the agent config")

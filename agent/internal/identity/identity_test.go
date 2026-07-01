@@ -60,7 +60,7 @@ func TestLoadRejectsWorldReadableKey(t *testing.T) {
 	}
 }
 
-// The connect JWT must verify against the public key the control plane stores.
+// The connect JWT must verify against the public key the API stores.
 func TestSignConnectJWTVerifies(t *testing.T) {
 	id, _ := Generate()
 	machineID := "m_test"

@@ -12,7 +12,7 @@
 //   openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in app.pem -out app.pkcs8.pem
 
 const GH_API = "https://api.github.com";
-const UA = "outpost-control-plane";
+const UA = "outpost-api";
 
 /** Constant-time-ish HMAC-SHA256 verification of a GitHub webhook delivery. */
 export async function verifyWebhookSignature(

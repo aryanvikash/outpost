@@ -1,7 +1,7 @@
 // Operational alerting. Best-effort outgoing webhook fired on noteworthy events
 // (a machine going offline, a job failing/interrupting). Posts a compact JSON
 // payload to ALERT_WEBHOOK_URL — generic enough for Slack/Discord/custom
-// endpoints. Alerting must NEVER affect control-plane behavior, so every send is
+// endpoints. Alerting must NEVER affect API behavior, so every send is
 // guarded and swallows its own errors.
 
 import type { Env } from "./env";

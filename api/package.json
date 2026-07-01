@@ -1,7 +1,7 @@
 {
-  "name": "outpost-control-plane",
+  "name": "outpost-api",
   "version": "0.1.0",
-  "description": "Outpost control plane — Cloudflare Worker + Durable Objects + D1",
+  "description": "Outpost API — Cloudflare Worker + Durable Objects + D1",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",

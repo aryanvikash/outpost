@@ -1,4 +1,4 @@
-# Outpost control plane — Cloudflare Worker + Durable Objects + D1
+# Outpost API — Cloudflare Worker + Durable Objects + D1
 #
 # Before first deploy:
 #   1. wrangler d1 create outpost      → paste the returned database_id below

@@ -18,4 +18,4 @@ outpost ALL=(appuser) NOPASSWD: /usr/bin/git -C /srv/app *
 outpost ALL=(appuser) NOPASSWD: /usr/bin/npm --prefix /srv/app ci *
 
 # NOTE: keep this list as tight as the action set. Every line here widens the
-# blast radius if the control plane is compromised. Review on every action change.
+# blast radius if the API is compromised. Review on every action change.

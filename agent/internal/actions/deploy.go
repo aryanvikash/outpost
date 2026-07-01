@@ -12,7 +12,7 @@ import (
 	"github.com/aryanvikash/outpost/agent/internal/protocol"
 )
 
-// DeployInfo reports this host's deploy target so the control plane/UI can show
+// DeployInfo reports this host's deploy target so the API/UI can show
 // it. The repo URL is resolved best-effort from the checkout; empty if the path
 // doesn't exist or isn't a git repo.
 func DeployInfo() protocol.DeployConfig {

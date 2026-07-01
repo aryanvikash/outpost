@@ -16,13 +16,13 @@ acknowledge within 72 hours.
    servers need no inbound ports (including SSH/22). This shrinks the network
    attack surface to "can the box make an outbound TLS connection."
 2. **Device-held keys, no shared connect secret.** Each agent generates its own
-   Ed25519 keypair on the box; the private key never leaves it. The control plane
+   Ed25519 keypair on the box; the private key never leaves it. The API
    stores only the public key and verifies a short-lived (~60s) device-signed JWT
-   on every connect. A control-plane/D1 leak exposes no usable credential. See
+   on every connect. An API/D1 leak exposes no usable credential. See
    [`ENROLLMENT.md`](./ENROLLMENT.md). First registration is authorized by a
    short-lived, hashed-at-rest **enroll token** — the only secret that ever
    crosses the wire, and only once.
-3. **No arbitrary command execution.** The control plane sends a *named action*
+3. **No arbitrary command execution.** The API sends a *named action*
    from a closed allowlist plus a *validated, constrained params object* — never
    a command string. The action→command mapping lives only in the agent
    (`agent/internal/actions`). Adding or changing an action is a code change,
@@ -46,7 +46,7 @@ acknowledge within 72 hours.
    etc.). Deploy actions get only a narrow `sudoers` grant for the specific
    commands they run — see `packaging/sudoers/outpost-agent`.
 8. **TLS pinning (optional).** Set `OUTPOST_TLS_PIN` to the base64 SHA-256 of the
-   control-plane certificate's SubjectPublicKeyInfo to pin it and defend against
+   API certificate's SubjectPublicKeyInfo to pin it and defend against
    a mis-issued/compromised CA.
 9. **Signed releases.** Release binaries ship with SHA-256 checksums; the
    checksum file is signed with cosign/Sigstore (keyless). The installer verifies
@@ -54,11 +54,11 @@ acknowledge within 72 hours.
 
 ## Threat model
 
-**The control plane is the trust anchor.** Whoever controls the Worker can issue
+**The API is the trust anchor.** Whoever controls the Worker can issue
 jobs to every connected agent. Therefore:
 
 - The **allowlist is the blast-radius limiter.** Even with a fully compromised
-  control plane, an attacker can only invoke the vetted actions with validated
+  API, an attacker can only invoke the vetted actions with validated
   params — not run arbitrary commands. Keep the allowlist minimal and audit every
   addition.
 - Protect `ADMIN_TOKEN` as a high-value secret. Store it as a Worker secret
@@ -72,7 +72,7 @@ supply-chain integrity of released binaries.
 
 **Out of scope (by design, for now):** a compromised host's own integrity (if an
 attacker already has root on the box, Outpost is not your control); full config
-management; multi-tenant isolation (single-tenant control plane today).
+management; multi-tenant isolation (single-tenant API today).
 
 ## GitHub App triggers (Phase 6)
 
