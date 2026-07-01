@@ -11,7 +11,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./env";
-import { heartbeatSec, githubAppConfigured } from "./env";
+import { heartbeatSec, githubAppConfigured, maxQueueAgeSec } from "./env";
 import { DB } from "./db/index";
 import { setCommitStatus } from "./github-app";
 import {
@@ -33,7 +33,13 @@ const TERMINAL = new Set([
   "timed_out",
   "canceled",
   "interrupted",
+  "superseded",
+  "expired",
 ]);
+
+// Actions where a newer queued job makes an older queued one pointless — a later
+// push should deploy the latest commit, not replay every intermediate one.
+const COALESCE_ACTIONS = new Set(["deploy"]);
 
 interface QueueRow {
   job_id: string;
@@ -187,6 +193,26 @@ export class MachineDO extends DurableObject<Env> {
       github: { repo: string; sha: string; installationId: number } | null;
     };
     const now = Date.now();
+
+    // Coalesce: a newer deploy supersedes any still-queued deploy of the same
+    // branch, so a burst of pushes (or a backlog built up while the agent was
+    // offline) collapses to the latest commit instead of replaying each one. A
+    // job already dispatched/running is in flight and is left untouched.
+    if (COALESCE_ACTIONS.has(job.action)) {
+      const branch = branchOf(job.params);
+      const stale = this.ctx.storage.sql
+        .exec<QueueRow>(
+          `SELECT * FROM queue WHERE status = 'queued' AND action = ?`,
+          job.action,
+        )
+        .toArray()
+        .filter((r) => branchOf(safeParams(r.params_json)) === branch);
+      for (const old of stale) {
+        this.ctx.storage.sql.exec(`DELETE FROM queue WHERE job_id = ?`, old.job_id);
+        await this.db.setJobStatus(old.job_id, "superseded", { finishedAt: now });
+      }
+    }
+
     this.ctx.storage.sql.exec(
       `INSERT INTO queue
          (job_id, action, params_json, timeout_sec, idempotent, status, created_at,
@@ -347,6 +373,8 @@ export class MachineDO extends DurableObject<Env> {
 
   /** Push the oldest queued job if nothing is currently in flight. */
   private async dispatchNext(ws: WebSocket): Promise<boolean> {
+    await this.expireStaleQueued();
+
     const inFlight = this.ctx.storage.sql
       .exec<QueueRow>(
         `SELECT * FROM queue WHERE status IN ('dispatched','running') LIMIT 1`,
@@ -382,6 +410,29 @@ export class MachineDO extends DurableObject<Env> {
     await this.db.setJobStatus(job.job_id, "dispatched", { dispatchedAt: now });
     this.postCommitStatus(job, "pending", `running ${job.action}…`);
     return true;
+  }
+
+  /**
+   * Expire any job that has sat queued longer than the configured TTL, so a long
+   * agent outage doesn't end in a deploy of a stale commit when it reconnects.
+   * Only 'queued' jobs are touched; in-flight jobs are never expired here.
+   */
+  private async expireStaleQueued(): Promise<void> {
+    const cutoff = Date.now() - maxQueueAgeSec(this.env) * 1000;
+    const stale = this.ctx.storage.sql
+      .exec<QueueRow>(
+        `SELECT * FROM queue WHERE status = 'queued' AND created_at < ?`,
+        cutoff,
+      )
+      .toArray();
+    const now = Date.now();
+    for (const job of stale) {
+      this.ctx.storage.sql.exec(`DELETE FROM queue WHERE job_id = ?`, job.job_id);
+      await this.db.setJobStatus(job.job_id, "expired", {
+        finishedAt: now,
+        error: "expired before dispatch (queue TTL)",
+      });
+    }
   }
 
   private async completeJob(
@@ -555,4 +606,18 @@ export class MachineDO extends DurableObject<Env> {
 /** Read a socket's attachment (role tag), or null. */
 function att(ws: WebSocket): Attachment | null {
   return (ws.deserializeAttachment() as Attachment | null) ?? null;
+}
+
+/** The branch a deploy targets, "" if unset — the coalescing key. */
+function branchOf(params: Record<string, unknown>): string {
+  return typeof params.branch === "string" ? params.branch : "";
+}
+
+function safeParams(json: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(json);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 }
