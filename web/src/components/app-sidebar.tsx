@@ -45,8 +45,8 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader>
         <Link to="/" className="flex items-center gap-3 rounded-md p-1">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-violet-500 shadow-lg shadow-primary/30">
-            <Tent className="h-4 w-4 text-white" />
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-foreground">
+            <Tent className="h-4 w-4 text-background" />
           </span>
           <span className="min-w-0 leading-tight group-data-[collapsible=icon]:hidden">
             <span className="block truncate text-[15px] font-bold tracking-tight">Outpost</span>

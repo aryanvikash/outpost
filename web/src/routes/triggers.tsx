@@ -32,7 +32,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
-const CARD = "border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl";
+const CARD = "border-border bg-card rounded-lg";
 
 interface TargetDraft {
   machineId: string;
@@ -52,7 +52,7 @@ export function TriggersPage() {
           One secret URL that fires one or more actions across your machines from
           any workflow — CI, cron, a custom system. Curl it, every target runs.
           Fires show up in the Webhook log as{" "}
-          <code className="rounded bg-secondary/30 px-1 py-0.5 font-mono text-xs text-primary">
+          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs text-primary">
             custom
           </code>
           .
@@ -127,7 +127,7 @@ function CreateTriggerCard() {
           {targets.map((t, i) => (
             <div
               key={i}
-              className="grid gap-2.5 rounded-xl border border-white/5 bg-secondary/10 p-2.5 sm:grid-cols-[1fr_150px_1fr_auto] sm:items-center"
+              className="grid gap-2.5 rounded-lg border border-border bg-background p-2.5 sm:grid-cols-[1fr_150px_1fr_auto] sm:items-center"
             >
               <Select value={t.machineId} onValueChange={(v) => patch(i, { machineId: v })}>
                 <SelectTrigger>
@@ -185,12 +185,12 @@ function CreateTriggerCard() {
         </div>
 
         {created && (
-          <div className="space-y-2 rounded-xl border border-primary/25 bg-primary/5 p-4">
+          <div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-4">
             <p className="flex items-center gap-2 text-sm font-medium text-primary">
               <KeyRound className="h-4 w-4" /> Trigger URL — copy it now, it won't be shown again.
             </p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 overflow-x-auto rounded-lg border border-white/5 bg-black/40 px-3 py-2 font-mono text-xs text-primary">
+              <code className="flex-1 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-primary">
                 {created.url}
               </code>
               <CopyButton value={created.url} />
@@ -229,7 +229,7 @@ function TriggerListCard() {
         {triggers.data?.map((t) => (
           <div
             key={t.id}
-            className="flex items-start gap-4 rounded-xl border border-white/5 bg-secondary/10 p-3.5 shadow-sm"
+            className="flex items-start gap-4 rounded-lg border border-border bg-background p-3.5 shadow-sm"
           >
             <Webhook className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
@@ -238,7 +238,7 @@ function TriggerListCard() {
                 {t.targets.map((tg, i) => (
                   <span
                     key={i}
-                    className="flex items-center gap-1.5 rounded-md border border-white/5 bg-card/40 px-2 py-0.5 text-xs"
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-0.5 text-xs"
                   >
                     <Badge variant="secondary" className="border-0 bg-primary/10 px-1.5 py-0 text-[10px] text-primary">
                       {tg.action}

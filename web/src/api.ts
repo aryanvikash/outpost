@@ -3,14 +3,27 @@
 const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 const TOKEN_KEY = "outpost_admin_jwt";
 
+// Auth is observable so <AuthGuard> can react the moment a token appears or a
+// 401 clears it — otherwise a session that expires mid-page just renders
+// "unauthorized" and strands the user on a signed-out screen.
+const listeners = new Set<() => void>();
+
+export function onAuthChange(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
+  listeners.forEach((cb) => cb());
 }
 export function clearToken(): void {
+  if (!localStorage.getItem(TOKEN_KEY)) return;
   localStorage.removeItem(TOKEN_KEY);
+  listeners.forEach((cb) => cb());
 }
 
 export class ApiError extends Error {

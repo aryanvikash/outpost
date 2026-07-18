@@ -66,7 +66,7 @@ app.use("/api/*", (c, next) =>
   cors({
     origin: c.env.ADMIN_UI_ORIGIN || "*",
     allowHeaders: ["Authorization", "Content-Type"],
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     maxAge: 86400,
   })(c, next),
 );

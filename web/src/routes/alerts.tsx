@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
-const CARD = "border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl";
+const CARD = "border-border bg-card rounded-lg";
 
 export function AlertsPage() {
   return (
@@ -135,7 +135,7 @@ function Toggle({
         "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
         on
           ? "border-primary/30 bg-primary/10 text-primary"
-          : "border-white/5 bg-secondary/20 text-muted-foreground hover:text-foreground",
+          : "border-border bg-secondary text-muted-foreground hover:text-foreground",
       )}
     >
       <span className={cn("grid h-4 w-4 place-items-center rounded", on ? "bg-primary text-primary-foreground" : "bg-secondary")}>
@@ -160,7 +160,7 @@ function AlertFeedCard() {
           <Bell className="h-5 w-5 text-primary" /> Recent alerts
         </CardTitle>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px_1px] shadow-primary/50" />{" "}
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{" "}
           auto-refresh
         </span>
       </CardHeader>
@@ -182,7 +182,7 @@ function AlertFeedCard() {
 function AlertRow({ alert, machineName }: { alert: Alert; machineName: string }) {
   const offline = alert.type === "machine_offline";
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-white/5 bg-secondary/10 p-3.5 shadow-sm">
+    <div className="flex items-center gap-4 rounded-lg border border-border bg-background p-3.5 shadow-sm">
       <span
         className={cn(
           "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
@@ -208,7 +208,7 @@ function AlertRow({ alert, machineName }: { alert: Alert; machineName: string })
         )}
       </div>
       {alert.delivered && (
-        <Badge variant="outline" className="ml-auto border-white/5 text-xs text-muted-foreground">
+        <Badge variant="outline" className="ml-auto border-border text-xs text-muted-foreground">
           <Send className="mr-1 h-3 w-3" /> sent
         </Badge>
       )}

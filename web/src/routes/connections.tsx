@@ -20,7 +20,7 @@ export function ConnectionsPage() {
         </p>
       </div>
 
-      <div className="inline-flex rounded-xl border border-white/5 bg-secondary/20 p-1.5 backdrop-blur-md">
+      <div className="inline-flex rounded-lg border border-border bg-secondary p-1.5">
         <ToggleButton
           active={provider === "github"}
           onClick={() => setProvider("github")}
@@ -59,8 +59,8 @@ function ToggleButton({
       className={cn(
         "flex items-center gap-2.5 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200",
         active
-          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]"
-          : "text-muted-foreground hover:text-foreground hover:bg-secondary/40",
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:text-foreground hover:bg-secondary",
       )}
     >
       {icon}
@@ -72,7 +72,7 @@ function ToggleButton({
 function GitHubSetup() {
   const hook = webhookUrl();
   return (
-    <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl">
+    <Card className="border-border bg-card rounded-lg">
       <CardHeader className="flex flex-row items-center justify-between pb-6 space-y-0">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Github className="h-5 w-5 text-primary" /> GitHub App
@@ -99,7 +99,7 @@ function GitHubSetup() {
       <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground/90 leading-relaxed">
           Install a GitHub App to auto-deploy on push — installed repos deliver{" "}
-          <code className="font-mono text-xs bg-secondary/30 px-1 py-0.5 rounded text-primary">push</code> events here, no per-repo webhook needed.
+          <code className="font-mono text-xs bg-secondary px-1 py-0.5 rounded text-primary">push</code> events here, no per-repo webhook needed.
         </p>
 
         <WebhookUrlField url={hook} />
@@ -120,7 +120,7 @@ function GitHubSetup() {
           <li className="flex gap-3">
             <span className="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-extrabold text-primary border border-primary/20">3</span>
             <div>
-              On the Worker, set secrets <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary/30 text-primary">GITHUB_WEBHOOK_SECRET</code>, <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary/30 text-primary">GITHUB_APP_ID</code>, and <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary/30 text-primary">GITHUB_APP_PRIVATE_KEY</code>.
+              On the Worker, set secrets <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary text-primary">GITHUB_WEBHOOK_SECRET</code>, <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary text-primary">GITHUB_APP_ID</code>, and <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary text-primary">GITHUB_APP_PRIVATE_KEY</code>.
             </div>
           </li>
           <li className="flex gap-3">
@@ -138,7 +138,7 @@ function GitHubSetup() {
 function BitbucketSetup() {
   const hook = bitbucketWebhookUrl();
   return (
-    <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl">
+    <Card className="border-border bg-card rounded-lg">
       <CardHeader className="flex flex-row items-center justify-between pb-6 space-y-0">
         <CardTitle className="flex items-center gap-2 text-lg">
           <FolderGit2 className="h-5 w-5 text-primary" /> Bitbucket webhook
@@ -155,7 +155,7 @@ function BitbucketSetup() {
       <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground/90 leading-relaxed">
           Add a per-repo webhook to auto-deploy on push. A{" "}
-          <code className="font-mono text-xs bg-secondary/30 px-1 py-0.5 rounded text-primary">repo:push</code> delivery is matched against the
+          <code className="font-mono text-xs bg-secondary px-1 py-0.5 rounded text-primary">repo:push</code> delivery is matched against the
           bindings below and runs the bound action.
         </p>
 
@@ -177,8 +177,8 @@ function BitbucketSetup() {
           <li className="flex gap-3">
             <span className="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-extrabold text-primary border border-primary/20">3</span>
             <div>
-              On the Worker, set secret <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary/30 text-primary">BITBUCKET_WEBHOOK_SECRET</code> (and optionally <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary/30 text-primary">BITBUCKET_ACCESS_TOKEN</code> for build-status feedback):
-              <code className="mt-2 block overflow-x-auto rounded-xl border border-white/5 bg-secondary/20 px-3.5 py-2 font-mono text-xs text-foreground/90 leading-relaxed">
+              On the Worker, set secret <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary text-primary">BITBUCKET_WEBHOOK_SECRET</code> (and optionally <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary text-primary">BITBUCKET_ACCESS_TOKEN</code> for build-status feedback):
+              <code className="mt-2 block overflow-x-auto rounded-lg border border-border bg-secondary px-3.5 py-2 font-mono text-xs text-foreground/90 leading-relaxed">
                 wrangler secret put BITBUCKET_WEBHOOK_SECRET
               </code>
             </div>
@@ -186,12 +186,12 @@ function BitbucketSetup() {
           <li className="flex gap-3">
             <span className="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-extrabold text-primary border border-primary/20">4</span>
             <div>
-              Add a repo binding below using the <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary/30 text-primary">workspace/repo</code> slug, then push to test.
+              Add a repo binding below using the <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-secondary text-primary">workspace/repo</code> slug, then push to test.
             </div>
           </li>
         </ol>
 
-        <p className="rounded-xl border border-white/5 bg-secondary/10 px-4 py-3 text-xs text-muted-foreground/80 leading-relaxed">
+        <p className="rounded-lg border border-border bg-background px-4 py-3 text-xs text-muted-foreground/80 leading-relaxed">
           Build-status feedback (pass/fail posted back to the commit) requires{" "}
           <code className="font-mono text-[11px] text-primary">BITBUCKET_ACCESS_TOKEN</code> with{" "}
           <code className="font-mono text-[11px] text-primary">repository:write</code> scope. The push → deploy flow works
@@ -208,8 +208,8 @@ function WebhookUrlField({ url }: { url: string }) {
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
         Webhook URL
       </p>
-      <div className="flex items-center gap-3 p-1.5 rounded-xl border border-white/5 bg-secondary/10">
-        <code className="flex-1 overflow-x-auto px-3 py-2 font-mono text-xs text-primary bg-card/25 rounded-lg border border-white/5">
+      <div className="flex items-center gap-3 p-1.5 rounded-lg border border-border bg-background">
+        <code className="flex-1 overflow-x-auto px-3 py-2 font-mono text-xs text-primary bg-card rounded-lg border border-border">
           {url}
         </code>
         <CopyButton value={url} />

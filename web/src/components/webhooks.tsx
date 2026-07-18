@@ -49,7 +49,7 @@ export function CopyButton({ value }: { value: string }) {
     <Button
       variant="outline"
       size="icon"
-      className="bg-card/50 border-white/5 hover:bg-primary/15 hover:text-primary transition-all h-9 w-9 shrink-0"
+      className="bg-card border-border hover:bg-primary/15 hover:text-primary transition-all h-9 w-9 shrink-0"
       onClick={() => {
         navigator.clipboard.writeText(value);
         setCopied(true);
@@ -103,30 +103,30 @@ export function DeliveriesCard() {
   }
 
   return (
-    <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl">
+    <Card className="border-border bg-card rounded-lg">
       <CardHeader className="flex flex-row items-center justify-between pb-6 space-y-0">
         <CardTitle className="text-lg">Recent deliveries</CardTitle>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px_1px] shadow-primary/50" /> auto-refresh
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> auto-refresh
         </span>
       </CardHeader>
       <CardContent>
         <div className="space-y-2.5">
           {deliveries.data?.map((d) => (
-            <div key={d.id} className="flex items-center gap-4 rounded-xl border border-white/5 bg-secondary/10 p-3.5 hover:bg-secondary/15 transition-all shadow-sm">
+            <div key={d.id} className="flex items-center gap-4 rounded-lg border border-border bg-background p-3.5 hover:bg-secondary transition-all shadow-sm">
               <ProviderPill provider={d.provider} />
-              <Badge variant="outline" className="font-mono bg-card/40 border-white/5 text-xs">
+              <Badge variant="outline" className="font-mono bg-card border-border text-xs">
                 {d.event}
               </Badge>
               <span className="font-mono text-sm font-medium text-foreground/95 truncate max-w-[200px]">{d.repo ?? "—"}</span>
               {d.branch && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground/80 bg-secondary/20 px-2 py-0.5 rounded-md border border-white/5">
+                <span className="flex items-center gap-1 text-xs text-muted-foreground/80 bg-secondary px-2 py-0.5 rounded-md border border-border">
                   <GitBranch className="h-3 w-3 text-primary" />
                   {d.branch}
                 </span>
               )}
               {d.sha && (
-                <code className="font-mono text-[11px] text-muted-foreground/70 bg-card/30 px-1.5 py-0.5 rounded border border-white/5">
+                <code className="font-mono text-[11px] text-muted-foreground/70 bg-card px-1.5 py-0.5 rounded border border-border">
                   {d.sha.slice(0, 7)}
                 </code>
               )}
@@ -168,7 +168,7 @@ export function BindingsCard() {
   });
 
   return (
-    <Card className="border-white/5 bg-card/40 backdrop-blur-xl shadow-lg rounded-xl">
+    <Card className="border-border bg-card rounded-lg">
       <CardHeader className="pb-4">
         <CardTitle className="text-lg">Repository bindings</CardTitle>
         <span className="text-xs text-muted-foreground/80">push to repo+branch → run action</span>
@@ -178,16 +178,16 @@ export function BindingsCard() {
  
         <div className="space-y-2.5">
           {bindings.data?.map((b) => (
-            <div key={b.id} className="flex items-center gap-4 rounded-xl border border-white/5 bg-secondary/10 p-3.5 hover:bg-secondary/15 transition-all shadow-sm">
+            <div key={b.id} className="flex items-center gap-4 rounded-lg border border-border bg-background p-3.5 hover:bg-secondary transition-all shadow-sm">
               <FolderGit2 className="h-4 w-4 shrink-0 text-primary" />
               <span className="font-mono text-sm font-semibold text-foreground/95 truncate max-w-[200px]">{b.repo}</span>
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground/80 bg-secondary/20 px-2 py-0.5 rounded-md border border-white/5">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground/80 bg-secondary px-2 py-0.5 rounded-md border border-border">
                 <GitBranch className="h-3 w-3 text-primary" />
                 {b.branch}
               </span>
               <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/50" />
               <Badge variant="secondary" className="bg-primary/10 text-primary border-0">{b.action}</Badge>
-              <code className="font-mono text-[11px] text-muted-foreground/80 bg-card/30 px-2 py-0.5 rounded border border-white/5">{b.machineId}</code>
+              <code className="font-mono text-[11px] text-muted-foreground/80 bg-card px-2 py-0.5 rounded border border-border">{b.machineId}</code>
               <Button
                 variant="ghost"
                 size="icon"
@@ -199,7 +199,7 @@ export function BindingsCard() {
             </div>
           ))}
           {bindings.data?.length === 0 && (
-            <div className="rounded-xl border border-white/5 bg-secondary/10 py-8 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-border bg-background py-8 text-center text-sm text-muted-foreground">
               No bindings yet — add one above.
             </div>
           )}
@@ -227,12 +227,12 @@ function AddBindingForm({ machines }: { machines: Machine[] }) {
   const valid = repo.includes("/") && branch && machineId;
 
   return (
-    <div className="rounded-xl border border-white/5 bg-secondary/15 p-4 shadow-sm">
+    <div className="rounded-lg border border-border bg-background p-4 shadow-sm">
       <div className="grid gap-3 sm:grid-cols-[1fr_140px_1fr_120px_auto] sm:items-center">
-        <Input placeholder="workspace/repo" value={repo} onChange={(e) => setRepo(e.target.value)} className="bg-card/50 border-white/10" />
-        <Input placeholder="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="bg-card/50 border-white/10" />
+        <Input placeholder="workspace/repo" value={repo} onChange={(e) => setRepo(e.target.value)} className="bg-card border-border" />
+        <Input placeholder="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className="bg-card border-border" />
         <Select value={machineId} onValueChange={setMachineId}>
-          <SelectTrigger className="bg-card/50 border-white/10">
+          <SelectTrigger className="bg-card border-border">
             <SelectValue placeholder="machine" />
           </SelectTrigger>
           <SelectContent>
@@ -244,7 +244,7 @@ function AddBindingForm({ machines }: { machines: Machine[] }) {
           </SelectContent>
         </Select>
         <Select value={action} onValueChange={setAction}>
-          <SelectTrigger className="bg-card/50 border-white/10">
+          <SelectTrigger className="bg-card border-border">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -255,7 +255,7 @@ function AddBindingForm({ machines }: { machines: Machine[] }) {
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => create.mutate()} disabled={!valid || create.isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(var(--primary),0.3)] transition-all">
+        <Button onClick={() => create.mutate()} disabled={!valid || create.isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground transition-all">
           {create.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : <Plus className="h-4 w-4" />}
           Add
         </Button>

@@ -3,43 +3,98 @@
 @tailwind utilities;
 
 @layer base {
+  /* Monochrome. Every neutral sits at chroma 0 — no hue tint anywhere, which is
+     what makes the status colors (emerald online, red failed) carry all the
+     signal on a page. Primary is not a hue, it's contrast: white on the dark
+     shell, near-black on the light one. */
   :root {
-    --background: 230 30% 3%;
-    --foreground: 210 20% 98%;
-    --card: 230 25% 6%;
-    --card-foreground: 210 20% 98%;
-    --popover: 230 25% 6%;
-    --popover-foreground: 210 20% 98%;
-    
-    /* Vibrant Electric Cyan */
-    --primary: 190 95% 55%;
-    --primary-foreground: 230 30% 3%;
-    
-    --secondary: 230 20% 10%;
-    --secondary-foreground: 210 20% 98%;
-    
-    --muted: 230 20% 12%;
-    --muted-foreground: 215 15% 65%;
-    
-    --accent: 190 95% 55%;
-    --accent-foreground: 230 30% 3%;
-    
-    --destructive: 350 85% 60%;
-    --destructive-foreground: 0 0% 100%;
-    
-    --border: 230 15% 14%;
-    --input: 230 15% 14%;
-    --ring: 190 95% 55%;
-    --radius: 1rem;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 93%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 93%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 93%;
 
-    --sidebar-background: 230 30% 2%;
-    --sidebar-foreground: 210 20% 98%;
-    --sidebar-primary: 190 95% 55%;
-    --sidebar-primary-foreground: 230 30% 3%;
-    --sidebar-accent: 230 20% 10%;
-    --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 230 15% 10%;
-    --sidebar-ring: 190 95% 55%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 6%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 93%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 64%;
+
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 358 75% 59%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 0 0% 83%;
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 93%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 6%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 0 0% 83%;
+  }
+}
+
+@layer base {
+  /* Light surface, scoped rather than global: the signed-in shell stays dark,
+     but sign-in is a daylight, get-me-in-and-out moment, so it gets its own
+     token set. Same monochrome system, inverted. */
+  .theme-light {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 9%;
+
+    --destructive: 358 70% 47%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 92%;
+    --input: 0 0% 89%;
+    --ring: 0 0% 9%;
+    --radius: 0.5rem;
+
+    color-scheme: light;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+  .animate-rise-in {
+    animation: rise-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise-in {
+      animation: none;
+    }
   }
 }
 
@@ -51,10 +106,6 @@
     @apply bg-background text-foreground;
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
-    background-image:
-      radial-gradient(1100px 600px at 82% -12%, hsl(var(--primary) / 0.15), transparent 60%),
-      radial-gradient(900px 520px at -8% -5%, hsl(var(--primary) / 0.08), transparent 55%);
-    background-attachment: fixed;
   }
 
   ::-webkit-scrollbar {

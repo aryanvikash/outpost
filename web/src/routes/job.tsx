@@ -186,7 +186,7 @@ export function JobPage() {
           )}
         </CardHeader>
         <CardContent>
-          <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-black/40 p-4 font-mono text-[12.5px] leading-relaxed">
+          <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-4 font-mono text-[12.5px] leading-relaxed">
             {lines.length > 0 ? (
               lines.map((l, i) => (
                 <span key={i} className={l.stream === "stderr" ? "text-red-400" : "text-foreground/90"}>

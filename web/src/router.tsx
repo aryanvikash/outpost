@@ -6,6 +6,7 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { getToken, apiBase } from "./api";
+import { AuthGuard } from "@/components/auth-guard";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -44,11 +45,11 @@ function AppLayout() {
 }
 
 const rootRoute = createRootRoute({
-  component: () => {
-    const authed = !!getToken();
-    if (!authed) return <Outlet />;
-    return <AppLayout />;
-  },
+  component: () => (
+    <AuthGuard fallback={<Outlet />}>
+      <AppLayout />
+    </AuthGuard>
+  ),
 });
 
 const loginRoute = createRoute({

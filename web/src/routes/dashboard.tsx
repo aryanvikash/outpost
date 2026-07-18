@@ -57,7 +57,7 @@ export function DashboardPage() {
       {machines.isError && <p className="text-sm text-red-400">{(machines.error as Error).message}</p>}
 
       {!machines.isLoading && visible.length === 0 && (
-        <Card className="border-white/5 bg-card/30 backdrop-blur-xl">
+        <Card className="border-border bg-card">
           <CardContent className="grid min-h-[280px] place-items-center py-12 text-center text-muted-foreground">
             <div className="flex flex-col items-center">
               <svg width="72" height="72" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-4 opacity-80">
@@ -92,7 +92,7 @@ export function DashboardPage() {
 
 function Stat({ label, value, live }: { label: string; value: number; live?: boolean }) {
   return (
-    <div className="flex items-baseline gap-2 rounded-xl border border-white/5 bg-card/40 px-4 py-2 shadow-sm backdrop-blur-md">
+    <div className="flex items-baseline gap-2 rounded-lg border border-border bg-card px-4 py-2 shadow-sm">
       <span className={cn("text-lg font-bold tabular-nums", live && value > 0 && "text-primary")}>{value}</span>
       <span className="text-xs font-medium text-muted-foreground/80">{label}</span>
     </div>
@@ -105,13 +105,13 @@ function MachineCard({ m }: { m: Machine }) {
     <Link
       to="/machines/$machineId"
       params={{ machineId: m.id }}
-      className="group flex flex-col gap-3 rounded-2xl border border-white/5 bg-card/40 p-5 shadow-lg backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card/60"
+      className="group flex flex-col gap-3 rounded-lg border border-border bg-card p-5 transition-colors duration-150 hover:border-foreground/25"
     >
       <div className="flex items-center gap-3">
         <span
           className={cn(
-            "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
-            online ? "bg-primary/15 text-primary" : "bg-secondary/40 text-muted-foreground",
+            "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+            online ? "bg-emerald-500/15 text-emerald-400" : "bg-secondary text-muted-foreground",
           )}
         >
           <Server className="h-4.5 w-4.5" />
@@ -124,10 +124,10 @@ function MachineCard({ m }: { m: Machine }) {
             <span
               className={cn(
                 "h-1.5 w-1.5 rounded-full",
-                online ? "bg-primary shadow-[0_0_8px_1px] shadow-primary/50" : "bg-muted-foreground/40",
+                online ? "bg-emerald-500" : "bg-muted-foreground/40",
               )}
             />
-            <span className={online ? "text-primary" : "text-muted-foreground/70"}>
+            <span className={online ? "text-emerald-400" : "text-muted-foreground/70"}>
               {online ? "online" : "offline"}
             </span>
             <span className="text-muted-foreground/50">· {timeAgo(m.lastSeen)}</span>
@@ -135,11 +135,11 @@ function MachineCard({ m }: { m: Machine }) {
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
       </div>
-      <div className="flex items-center gap-2 border-t border-white/5 pt-3">
-        <code className="truncate rounded border border-white/5 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-2 border-t border-border pt-3">
+        <code className="truncate rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
           {m.id}
         </code>
-        <Badge variant="outline" className="ml-auto border-white/5 px-1.5 py-0 text-[10px] text-muted-foreground">
+        <Badge variant="outline" className="ml-auto border-border px-1.5 py-0 text-[10px] text-muted-foreground">
           {m.agentVersion ?? "—"}
         </Badge>
         {m.deploy?.mode && (
@@ -212,20 +212,20 @@ function EnrollDialog({
         ) : (
           <>
             <div className="group relative">
-              <pre className="whitespace-pre-wrap break-all rounded-xl border border-white/5 bg-secondary/20 p-4 pr-12 font-mono text-xs leading-relaxed text-primary/95 shadow-inner">
+              <pre className="whitespace-pre-wrap break-all rounded-lg border border-border bg-secondary p-4 pr-12 font-mono text-xs leading-relaxed text-primary/95">
                 {installCmd}
               </pre>
               <Button
                 size="icon"
                 variant="ghost"
-                className="absolute right-3.5 top-3.5 h-8 w-8 text-muted-foreground opacity-70 transition-all hover:bg-secondary/40 hover:text-primary group-hover:opacity-100"
+                className="absolute right-3.5 top-3.5 h-8 w-8 text-muted-foreground opacity-70 transition-all hover:bg-secondary hover:text-primary group-hover:opacity-100"
                 onClick={copy}
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </Button>
             </div>
             <div className="mt-2 flex justify-end gap-2.5">
-              <Button variant="outline" className="border-white/5 bg-secondary/20 hover:border-primary/30 hover:bg-primary/10 hover:text-primary" onClick={copy}>
+              <Button variant="outline" className="border-border bg-secondary hover:border-primary/30 hover:bg-primary/10 hover:text-primary" onClick={copy}>
                 {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
                 {copied ? "Copied" : "Copy command"}
               </Button>
