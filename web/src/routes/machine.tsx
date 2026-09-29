@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +11,9 @@ import {
   Loader2,
   AlertTriangle,
   ChevronRight,
+  RefreshCw,
+  RotateCcw,
+  Square,
 } from "lucide-react";
 import {
   listMachines,
@@ -18,10 +21,12 @@ import {
   revokeMachine,
   renameMachine,
   enqueueJob,
+  cancelJob,
+  getJob,
   ACTIONS,
   type Job,
 } from "../api";
-import { timeAgo } from "../util";
+import { timeAgo, formatDuration } from "../util";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,22 +81,72 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({
+  job,
+  onRetry,
+  onCancel,
+  retrying,
+  canceling,
+}: {
+  job: Job;
+  onRetry: (job: Job) => void;
+  onCancel: (job: Job) => void;
+  retrying: boolean;
+  canceling: boolean;
+}) {
   const tone = jobTone(job.status);
+  const active = !["succeeded", "failed", "timed_out", "canceled", "interrupted", "superseded", "expired"].includes(job.status);
+  const retryable = ["succeeded", "failed", "timed_out", "canceled", "interrupted", "expired"].includes(job.status);
   return (
-    <Link
-      to="/jobs/$jobId"
-      params={{ jobId: job.id }}
-      className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-secondary"
-    >
-      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tone.dot)} />
-      <span className={cn("w-24 shrink-0 text-xs", tone.label)}>{job.status}</span>
-      <span className="truncate font-medium">{job.action}</span>
-      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-        {timeAgo(job.createdAt)}
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />
-    </Link>
+    <div className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-secondary">
+      <Link
+        to="/jobs/$jobId"
+        params={{ jobId: job.id }}
+        className="flex min-w-0 flex-1 items-center gap-3"
+      >
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tone.dot)} />
+        <span className={cn("w-24 shrink-0 text-xs", tone.label)}>{job.status}</span>
+        <span className="truncate font-medium">{job.action}</span>
+        {job.exitCode !== null && job.exitCode !== undefined && (
+          <span className="shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+            exit {job.exitCode}
+          </span>
+        )}
+        <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground/70 sm:inline">
+          {formatDuration(job.createdAt, job.finishedAt)}
+        </span>
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          {timeAgo(job.createdAt)}
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+      </Link>
+      {active && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 shrink-0 px-2 text-muted-foreground hover:text-foreground"
+          onClick={() => onCancel(job)}
+          disabled={canceling}
+          title="Request cancellation"
+        >
+          {canceling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+          <span className="sr-only">Cancel</span>
+        </Button>
+      )}
+      {retryable && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 shrink-0 px-2 text-muted-foreground hover:text-foreground"
+          onClick={() => onRetry(job)}
+          disabled={retrying}
+          title="Re-run with same action + params"
+        >
+          {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+          <span className="sr-only">Re-run</span>
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -145,6 +200,11 @@ export function MachineDetailPage() {
   const [lastJob, setLastJob] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [jobQuery, setJobQuery] = useState("");
+  const [jobStatus, setJobStatus] = useState<string>("all");
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const jobs = useQuery({
     queryKey: ["jobs", machineId],
@@ -152,16 +212,32 @@ export function MachineDetailPage() {
     refetchInterval: 4000,
   });
 
+  // Branch/app validation mirrors the agent (deploy.go / restart.go) so the
+  // server doesn't refuse after a click.
+  const branchError =
+    action === "deploy" && !/^[A-Za-z0-9._/-]{1,255}$/.test(branch)
+      ? "Use letters, digits, . _ / - (max 255)."
+      : action === "deploy" && (branch.startsWith("-") || branch.includes(".."))
+        ? "Must not start with - or contain .."
+        : null;
+  const appError =
+    action === "restart" && app !== "" && !/^[A-Za-z0-9._-]{1,64}$/.test(app)
+      ? "Use letters, digits, . _ - (max 64)."
+      : null;
+  const paramsInvalid = Boolean(branchError || appError);
+
   const enqueue = useMutation({
     mutationFn: () => {
       const params: Record<string, unknown> =
-        action === "deploy" ? { branch } : action === "restart" && app ? { app } : {};
+        action === "deploy" ? { branch: branch.trim() || "main" } : action === "restart" && app.trim() ? { app: app.trim() } : {};
       return enqueueJob(machineId, action, params);
     },
     onSuccess: (r) => {
       setLastJob(r.jobId);
+      setActionError(null);
       qc.invalidateQueries({ queryKey: ["jobs", machineId] });
     },
+    onError: (e) => setActionError((e as Error).message),
   });
 
   const runHookMut = useMutation({
@@ -216,6 +292,42 @@ export function MachineDetailPage() {
   const online = machine?.status === "online";
   const allJobs = jobs.data ?? [];
   const atApiLimit = allJobs.length >= JOB_API_LIMIT;
+
+  const filteredJobs = useMemo(() => {
+    const q = jobQuery.trim().toLowerCase();
+    return allJobs.filter((j) => {
+      if (jobStatus !== "all" && j.status !== jobStatus) return false;
+      if (q && !`${j.id} ${j.action} ${j.status}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allJobs, jobQuery, jobStatus]);
+
+  const handleRetry = async (job: Job) => {
+    setRetryingId(job.id);
+    try {
+      const full = await getJob(job.id);
+      const r = await enqueueJob(machineId, full.action, (full.params as Record<string, unknown>) ?? {});
+      setLastJob(r.jobId);
+      setTab("jobs");
+      qc.invalidateQueries({ queryKey: ["jobs", machineId] });
+    } catch (e) {
+      setActionError((e as Error).message);
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const handleCancel = async (job: Job) => {
+    setCancelingId(job.id);
+    try {
+      await cancelJob(job.id);
+      qc.invalidateQueries({ queryKey: ["jobs", machineId] });
+    } catch (e) {
+      setActionError((e as Error).message);
+    } finally {
+      setCancelingId(null);
+    }
+  };
 
   return (
     <div>
@@ -344,7 +456,7 @@ export function MachineDetailPage() {
         <TabPanel id="overview" active={tab === "overview"}>
           <Section title="Run an action">
             <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center">
-              <Select value={action} onValueChange={setAction}>
+              <Select value={action} onValueChange={(v) => { setAction(v); setActionError(null); }}>
                 <SelectTrigger className="sm:w-[170px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -357,25 +469,34 @@ export function MachineDetailPage() {
                 </SelectContent>
               </Select>
               {action === "deploy" && (
-                <Input
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="branch"
-                  className="sm:max-w-[220px]"
-                />
+                <div className="sm:max-w-[220px]">
+                  <Input
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    placeholder="branch (e.g. main)"
+                    aria-label="Branch"
+                    aria-invalid={Boolean(branchError)}
+                  />
+                  {branchError && <p className="mt-1 text-xs text-destructive">{branchError}</p>}
+                </div>
               )}
               {action === "restart" && (
-                <Input
-                  value={app}
-                  onChange={(e) => setApp(e.target.value)}
-                  placeholder="app (optional)"
-                  className="sm:max-w-[220px]"
-                />
+                <div className="sm:max-w-[220px]">
+                  <Input
+                    value={app}
+                    onChange={(e) => setApp(e.target.value)}
+                    placeholder="app (optional)"
+                    aria-label="App name"
+                    aria-invalid={Boolean(appError)}
+                  />
+                  {appError && <p className="mt-1 text-xs text-destructive">{appError}</p>}
+                </div>
               )}
               <Button
                 onClick={() => enqueue.mutate()}
-                disabled={enqueue.isPending}
+                disabled={enqueue.isPending || paramsInvalid}
                 className="sm:ml-auto"
+                title={paramsInvalid ? "Fix invalid input first" : "Enqueue job"}
               >
                 {enqueue.isPending ? (
                   <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -386,8 +507,10 @@ export function MachineDetailPage() {
               </Button>
             </div>
 
-            {enqueue.isError && (
-              <p className="mt-2.5 text-sm text-destructive">{(enqueue.error as Error).message}</p>
+            {(enqueue.isError || actionError) && (
+              <p className="mt-2.5 text-sm text-destructive">
+                {(enqueue.error as Error | undefined)?.message ?? actionError}
+              </p>
             )}
             {lastJob && !enqueue.isError && (
               <p className="mt-2.5 flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -474,17 +597,81 @@ export function MachineDetailPage() {
         </TabPanel>
 
         <TabPanel id="jobs" active={tab === "jobs"}>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              value={jobQuery}
+              onChange={(e) => setJobQuery(e.target.value)}
+              placeholder="Search id, action, status…"
+              className="h-8 sm:max-w-xs"
+              aria-label="Search jobs"
+            />
+            <div className="flex items-center gap-2">
+              <Select value={jobStatus} onValueChange={setJobStatus}>
+                <SelectTrigger className="h-8 w-[150px]" aria-label="Filter by status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">all statuses</SelectItem>
+                  <SelectItem value="queued">queued</SelectItem>
+                  <SelectItem value="dispatched">dispatched</SelectItem>
+                  <SelectItem value="running">running</SelectItem>
+                  <SelectItem value="succeeded">succeeded</SelectItem>
+                  <SelectItem value="failed">failed</SelectItem>
+                  <SelectItem value="timed_out">timed_out</SelectItem>
+                  <SelectItem value="canceled">canceled</SelectItem>
+                  <SelectItem value="interrupted">interrupted</SelectItem>
+                  <SelectItem value="expired">expired</SelectItem>
+                  <SelectItem value="superseded">superseded</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => jobs.refetch()}
+                disabled={jobs.isFetching}
+                title="Refresh job list"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${jobs.isFetching ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {filteredJobs.length}/{allJobs.length}
+              </span>
+            </div>
+          </div>
           {/* The list scrolls in place rather than growing the page: 50 rows is
               ~2000px, and the header/tabs should stay put while you scan it. */}
           <div className="overflow-hidden rounded-lg border border-border">
             <div className="max-h-[60vh] divide-y divide-border overflow-y-auto overscroll-contain">
               {jobs.isLoading && <JobSkeleton />}
-              {allJobs.map((j) => (
-                <JobRow key={j.id} job={j} />
-              ))}
-              {jobs.data?.length === 0 && (
+              {jobs.isError && (
+                <div className="flex items-center justify-between px-4 py-6 text-sm">
+                  <span className="text-destructive">{(jobs.error as Error).message}</span>
+                  <Button variant="outline" size="sm" onClick={() => jobs.refetch()}>
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Retry
+                  </Button>
+                </div>
+              )}
+              {jobs.isSuccess &&
+                filteredJobs.map((j) => (
+                  <JobRow
+                    key={j.id}
+                    job={j}
+                    onRetry={handleRetry}
+                    onCancel={handleCancel}
+                    retrying={retryingId === j.id}
+                    canceling={cancelingId === j.id}
+                  />
+                ))}
+              {jobs.isSuccess && allJobs.length === 0 && (
                 <p className="px-4 py-10 text-center text-sm text-muted-foreground">
                   No jobs yet — run one from Overview and it'll show up here.
+                </p>
+              )}
+              {jobs.isSuccess && allJobs.length > 0 && filteredJobs.length === 0 && (
+                <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  No jobs match — clear search/filter.
                 </p>
               )}
             </div>

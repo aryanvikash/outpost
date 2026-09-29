@@ -87,12 +87,12 @@ export interface Job {
   id: string;
   machineId: string;
   action: string;
-  params: Record<string, unknown>;
+  params?: Record<string, unknown>;
   status: string;
   exitCode: number | null;
   error: string | null;
   createdAt: number;
-  dispatchedAt: number | null;
+  dispatchedAt?: number | null;
   finishedAt: number | null;
 }
 
@@ -168,6 +168,15 @@ export async function listJobs(machineId: string): Promise<Job[]> {
 
 export async function getJob(id: string): Promise<Job> {
   return request(`/api/jobs/${id}`);
+}
+
+export async function cancelJob(id: string): Promise<{ requested: boolean }> {
+  return request(`/api/jobs/${id}/cancel`, { method: "POST" });
+}
+
+export async function retryJob(job: Job): Promise<{ jobId: string; status: string }> {
+  const full = job.params !== undefined ? job : await getJob(job.id);
+  return enqueueJob(full.machineId, full.action, full.params ?? {});
 }
 
 // --- GitHub repo bindings ----------------------------------------------------

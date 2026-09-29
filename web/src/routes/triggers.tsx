@@ -9,6 +9,7 @@ import {
   Zap,
   KeyRound,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 import {
   listMachines,
@@ -66,7 +67,7 @@ export function TriggersPage() {
 
 function CreateTriggerCard() {
   const qc = useQueryClient();
-  const machines = useQuery({ queryKey: ["machines"], queryFn: listMachines });
+  const machines = useQuery({ queryKey: ["machines"], queryFn: listMachines, refetchInterval: 5000 });
   const [label, setLabel] = useState("");
   const [targets, setTargets] = useState<TargetDraft[]>([emptyTarget()]);
   const [created, setCreated] = useState<{ url: string } | null>(null);
@@ -210,30 +211,53 @@ function CreateTriggerCard() {
 
 function TriggerListCard() {
   const qc = useQueryClient();
-  const triggers = useQuery({ queryKey: ["triggers"], queryFn: listTriggers });
-  const machines = useQuery({ queryKey: ["machines"], queryFn: listMachines });
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const triggers = useQuery({ queryKey: ["triggers"], queryFn: listTriggers, refetchInterval: 10000 });
+  const machines = useQuery({ queryKey: ["machines"], queryFn: listMachines, refetchInterval: 5000 });
   const nameOf = (id: string) => machines.data?.find((m) => m.id === id)?.name ?? id;
 
   const del = useMutation({
     mutationFn: (id: string) => deleteTrigger(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["triggers"] }),
+    onSuccess: () => {
+      setConfirmId(null);
+      qc.invalidateQueries({ queryKey: ["triggers"] });
+    },
   });
 
   return (
     <Card className={CARD}>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-lg">Active triggers</CardTitle>
-        <span className="text-xs text-muted-foreground/80">POST the URL → run every target</span>
+      <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0">
+        <div>
+          <CardTitle className="text-lg">Active triggers</CardTitle>
+          <span className="text-xs text-muted-foreground/80">POST the URL → run every target</span>
+        </div>
+        <Button variant="outline" size="sm" className="h-8" onClick={() => { triggers.refetch(); machines.refetch(); }} title="Refresh triggers">
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </Button>
       </CardHeader>
       <CardContent className="space-y-2.5">
+        {triggers.isLoading && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Loading…
+          </p>
+        )}
+        {triggers.isError && (
+          <div className="flex items-center justify-between rounded-lg border border-border px-4 py-4 text-sm">
+            <span className="text-destructive">{(triggers.error as Error).message}</span>
+            <Button variant="outline" size="sm" onClick={() => triggers.refetch()}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Retry
+            </Button>
+          </div>
+        )}
         {triggers.data?.map((t) => (
           <div
             key={t.id}
-            className="flex items-start gap-4 rounded-lg border border-border bg-background p-3.5 shadow-sm"
+            className="flex flex-wrap items-start gap-x-4 gap-y-2 rounded-lg border border-border bg-background p-3.5 shadow-sm"
           >
             <Webhook className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-foreground/95">{t.label ?? t.id}</p>
+            <div className="min-w-0 flex-1 basis-48">
+              <p className="truncate font-medium text-foreground/95">{t.label ?? t.id}</p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {t.targets.map((tg, i) => (
                   <span
@@ -244,7 +268,7 @@ function TriggerListCard() {
                       {tg.action}
                     </Badge>
                     <ArrowRight className="h-3 w-3 text-muted-foreground/50" />
-                    <span className="font-mono text-muted-foreground/90">{nameOf(tg.machineId)}</span>
+                    <span className="max-w-[140px] truncate font-mono text-muted-foreground/90">{nameOf(tg.machineId)}</span>
                   </span>
                 ))}
               </div>
@@ -252,14 +276,27 @@ function TriggerListCard() {
             <span className="shrink-0 text-xs text-muted-foreground/60">
               {t.lastUsedAt ? `used ${timeAgo(t.lastUsedAt)}` : "never used"}
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => del.mutate(t.id)}
-            >
-              <Trash2 />
-            </Button>
+            {confirmId === t.id ? (
+              <span className="flex shrink-0 items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Delete?</span>
+                <Button variant="destructive" size="sm" className="h-7" onClick={() => del.mutate(t.id)} disabled={del.isPending}>
+                  {del.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Confirm"}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7" onClick={() => setConfirmId(null)}>
+                  Keep
+                </Button>
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setConfirmId(t.id)}
+                title="Delete trigger"
+              >
+                <Trash2 />
+              </Button>
+            )}
           </div>
         ))}
         {triggers.data?.length === 0 && (

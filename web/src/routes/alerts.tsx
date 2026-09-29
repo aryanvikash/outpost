@@ -9,6 +9,7 @@ import {
   XCircle,
   Send,
   Inbox,
+  RefreshCw,
 } from "lucide-react";
 import {
   listAlerts,
@@ -155,16 +156,35 @@ function AlertFeedCard() {
 
   return (
     <Card className={CARD}>
-      <CardHeader className="pb-4">
+      <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Bell className="h-5 w-5 text-primary" /> Recent alerts
         </CardTitle>
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{" "}
-          auto-refresh
-        </span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="h-8" onClick={() => alerts.refetch()} disabled={alerts.isFetching} title="Refresh alerts">
+            <RefreshCw className={`h-3.5 w-3.5 ${alerts.isFetching ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />{" "}
+            auto-refresh
+          </span>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2.5">
+        {alerts.isLoading && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Loading…
+          </p>
+        )}
+        {alerts.isError && (
+          <div className="flex items-center justify-between rounded-lg border border-border px-4 py-4 text-sm">
+            <span className="text-destructive">{(alerts.error as Error).message}</span>
+            <Button variant="outline" size="sm" onClick={() => alerts.refetch()}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Retry
+            </Button>
+          </div>
+        )}
         {alerts.data?.map((a) => (
           <AlertRow key={a.id} alert={a} machineName={nameOf(a.machineId)} />
         ))}

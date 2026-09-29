@@ -4,7 +4,10 @@ import {
   createRouter,
   redirect,
   Outlet,
+  Link,
 } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { WifiOff } from "lucide-react";
 import { getToken, apiBase } from "./api";
 import { AuthGuard } from "@/components/auth-guard";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -24,6 +27,41 @@ function requireAuth() {
   if (!getToken()) throw redirect({ to: "/login" });
 }
 
+function OfflineBanner() {
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  if (online) return null;
+  return (
+    <div className="flex items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-500">
+      <WifiOff className="h-3.5 w-3.5" />
+      You're offline — data may be stale. Actions will fail until reconnected.
+    </div>
+  );
+}
+
+function NotFoundPage() {
+  return (
+    <div className="grid place-items-center gap-3 py-20 text-center">
+      <p className="text-lg font-semibold">Page not found</p>
+      <p className="text-sm text-muted-foreground">The link you followed doesn't exist.</p>
+      <Link to="/" className="text-sm text-primary underline-offset-4 hover:underline">
+        Back to machines
+      </Link>
+    </div>
+  );
+}
+
 function AppLayout() {
   return (
     <SidebarProvider>
@@ -36,7 +74,8 @@ function AppLayout() {
             {apiBase() || "API URL not set"}
           </span>
         </header>
-        <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+        <OfflineBanner />
+        <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
           <Outlet />
         </div>
       </SidebarInset>
@@ -50,6 +89,7 @@ const rootRoute = createRootRoute({
       <AppLayout />
     </AuthGuard>
   ),
+  notFoundComponent: NotFoundPage,
 });
 
 const loginRoute = createRoute({
