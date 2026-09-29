@@ -42,6 +42,8 @@ export interface HostStats {
   load1?: number;
   memUsedMb?: number;
   memTotalMb?: number;
+  diskUsedMb?: number;
+  diskTotalMb?: number;
 }
 
 export interface HeartbeatMessage {

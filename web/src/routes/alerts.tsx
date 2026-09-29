@@ -7,6 +7,7 @@ import {
   Check,
   WifiOff,
   XCircle,
+  Gauge,
   Send,
   Inbox,
   RefreshCw,
@@ -49,7 +50,7 @@ function AlertConfigCard() {
   const qc = useQueryClient();
   const cfg = useQuery({ queryKey: ["alertConfig"], queryFn: getAlertConfig });
   const [url, setUrl] = useState("");
-  const [events, setEvents] = useState({ machine_offline: true, job_failed: true });
+  const [events, setEvents] = useState({ machine_offline: true, job_failed: true, machine_resource: true });
 
   useEffect(() => {
     if (cfg.data) {
@@ -99,6 +100,12 @@ function AlertConfigCard() {
               onClick={() => setEvents((e) => ({ ...e, job_failed: !e.job_failed }))}
               icon={<XCircle className="h-3.5 w-3.5" />}
               label="Job failed / interrupted"
+            />
+            <Toggle
+              on={events.machine_resource}
+              onClick={() => setEvents((e) => ({ ...e, machine_resource: !e.machine_resource }))}
+              icon={<Gauge className="h-3.5 w-3.5" />}
+              label="Memory / disk over 90%"
             />
           </div>
         </div>
@@ -201,21 +208,26 @@ function AlertFeedCard() {
 
 function AlertRow({ alert, machineName }: { alert: Alert; machineName: string }) {
   const offline = alert.type === "machine_offline";
+  const resource = alert.type === "machine_resource";
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border bg-background p-3.5 shadow-sm">
       <span
         className={cn(
           "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-          offline ? "bg-amber-500/15 text-amber-400" : "bg-red-500/15 text-red-400",
+          offline || resource ? "bg-amber-500/15 text-amber-400" : "bg-red-500/15 text-red-400",
         )}
       >
-        {offline ? <WifiOff className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+        {offline ? <WifiOff className="h-4 w-4" /> : resource ? <Gauge className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
       </span>
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground/95">
           {offline ? (
             <>
               <span className="font-semibold">{machineName}</span> went offline
+            </>
+          ) : resource ? (
+            <>
+              <span className="font-semibold">{machineName}</span> is running low on resources
             </>
           ) : (
             <>

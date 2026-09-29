@@ -21,7 +21,7 @@ describe("alert config + feed", () => {
       events: { machine_offline: boolean; job_failed: boolean };
     };
     expect(cfg.webhookUrl).toBe("https://hooks.slack.com/services/xxx");
-    expect(cfg.events).toEqual({ machine_offline: true, job_failed: false });
+    expect(cfg.events).toEqual({ machine_offline: true, job_failed: false, machine_resource: true });
   });
 
   it("returns an alerts feed array", async () => {

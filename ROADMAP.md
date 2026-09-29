@@ -4,7 +4,7 @@ Generated from UI/API/Agent review. `[x]` = done, `[ ]` = todo.
 
 ## P0 — Fix before scaling
 
-- [ ] **Logs will blow D1** (`api/src/db/index.ts:291`, `worker.ts:469`, `machine-do.ts:181`)
+- [x] **Logs will blow D1** — per-job 2 MB cap done (`machine-do.ts` MAX_LOG_BYTES); pagination still todo (`api/src/db/index.ts:291`, `worker.ts:469`, `machine-do.ts:181`)
   - Add per-job cap (e.g. 2MB truncate + `truncated:true`), `?limit/cursor` pagination, virtualized viewer.
 - [ ] **Queue is lossy** (`api/src/enqueue.ts:54`, `machine-do.ts:445`)
   - D1-then-DO write has no rollback → orphan jobs; `dispatchNext` serial per-machine; coalesce only `deploy+github`.
@@ -45,7 +45,7 @@ Generated from UI/API/Agent review. `[x]` = done, `[ ]` = todo.
   - [ ] Fix `OUTPOST_APP_DIR` not reaching hooks (docs lie)
   - [ ] Allow `restart` via hook for non-Node
   - [ ] `pnpm/yarn/bun` + build step
-  - [ ] Fill real load1/mem/cpu/disk in `stats.go` (today only agent alloc)
+  - [x] Real load1/mem/disk/uptime in `stats.go`, shown on the machine page + `machine_resource` alert
 
 ## P2 — New features users will ask for
 

@@ -81,6 +81,16 @@ export interface Machine {
   deploy: DeployTarget | null;
   hooks: string[];
   hookIssues: HookIssue[];
+  stats: HostStats | null;
+}
+
+export interface HostStats {
+  uptimeSec?: number;
+  load1?: number;
+  memUsedMb?: number;
+  memTotalMb?: number;
+  diskUsedMb?: number;
+  diskTotalMb?: number;
 }
 
 export interface Job {
@@ -277,7 +287,7 @@ export async function deleteTrigger(id: string): Promise<void> {
 export interface Alert {
   id: number;
   ts: number;
-  type: "machine_offline" | "job_failed";
+  type: "machine_offline" | "job_failed" | "machine_resource";
   machineId: string | null;
   jobId: string | null;
   status: string | null;
@@ -287,7 +297,7 @@ export interface Alert {
 
 export interface AlertConfig {
   webhookUrl: string;
-  events: { machine_offline: boolean; job_failed: boolean };
+  events: { machine_offline: boolean; job_failed: boolean; machine_resource: boolean };
 }
 
 export async function listAlerts(): Promise<Alert[]> {

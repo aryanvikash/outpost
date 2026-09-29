@@ -17,7 +17,7 @@ import { heartbeatSec, githubAppConfigured, maxQueueAgeSec } from "./env";
 import { DB } from "./db/index";
 import { queue, type QueueRow } from "./db/queue-schema";
 import { setCommitStatus } from "./github-app";
-import { sendAlert, alertEventsFromConfig, type AlertEvent } from "./notify";
+import { sendAlert, alertEventsFromConfig, resourceBreaches, type AlertEvent } from "./notify";
 import {
   PROTOCOL_VERSION,
   parseAgentMessage,
@@ -49,6 +49,8 @@ const COALESCE_ACTIONS = new Set(["deploy"]);
 // interrupted mid-run by an agent disconnect. Bounded so a repeatedly-crashing
 // agent can't replay the same job forever.
 export const MAX_JOB_RETRIES = 1;
+/** Stored log per job (chars ≈ bytes for log text). */
+export const MAX_LOG_BYTES = 2 * 1024 * 1024;
 
 /**
  * Decide what to do with an in-flight job when the agent disconnects before
@@ -363,7 +365,10 @@ export class MachineDO extends DurableObject<Env> {
         break;
       }
       case "heartbeat": {
-        await this.db.touchMachine(machineId, now);
+        await this.db.touchMachine(machineId, now, msg.stats ? JSON.stringify(msg.stats) : undefined);
+        const r = resourceBreaches(msg.stats, (await this.ctx.storage.get<string[]>("resourceFlagged")) ?? []);
+        await this.ctx.storage.put("resourceFlagged", r.flagged);
+        if (r.fresh.length) this.notify({ type: "machine_resource", machineId, ts: now, detail: r.detail });
         await this.scheduleLivenessAlarm();
         break;
       }
@@ -377,6 +382,13 @@ export class MachineDO extends DurableObject<Env> {
         break;
       }
       case "log": {
+        // Cap each job's stored log so one chatty job can't fill D1.
+        const key = `logBytes:${msg.jobId}`;
+        const used = (await this.ctx.storage.get<number>(key)) ?? 0;
+        if (used >= MAX_LOG_BYTES) break;
+        const over = used + msg.chunk.length >= MAX_LOG_BYTES;
+        await this.ctx.storage.put(key, used + msg.chunk.length);
+        if (over) msg.chunk += `\n[outpost] log truncated at ${MAX_LOG_BYTES >> 20} MB; later output dropped\n`;
         await this.db.appendLog({
           job_id: msg.jobId,
           seq: msg.seq,
@@ -513,6 +525,7 @@ export class MachineDO extends DurableObject<Env> {
     error: string | null,
   ): Promise<void> {
     const now = Date.now();
+    await this.ctx.storage.delete(`logBytes:${jobId}`);
     let status = exitCode === 0 ? "succeeded" : "failed";
     if (exitCode === 124) status = "timed_out";
     if (exitCode === 130) status = "canceled";

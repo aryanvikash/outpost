@@ -31,6 +31,7 @@ import {
   verifyConnectJwt,
   isValidPublicKey,
 } from "./device-auth";
+import { alertEventsFromConfig, type AlertEventToggles } from "./notify";
 
 export { MachineDO } from "./machine-do";
 
@@ -272,6 +273,7 @@ admin.get("/machines", async (c) => {
       deploy: m.deploy_json ? JSON.parse(m.deploy_json) : null,
       hooks: m.hooks_json ? JSON.parse(m.hooks_json) : [],
       hookIssues: m.hook_issues_json ? JSON.parse(m.hook_issues_json) : [],
+      stats: m.stats_json ? JSON.parse(m.stats_json) : null,
     })),
   });
 });
@@ -583,14 +585,14 @@ admin.get("/alerts", async (c) => {
 admin.get("/alerts/config", async (c) => {
   const db = new DB(c.env.DB);
   const webhookUrl = (await db.getConfig("alert_webhook_url")) ?? c.env.ALERT_WEBHOOK_URL ?? "";
-  const events = parseEvents(await db.getConfig("alert_events"));
+  const events = alertEventsFromConfig(await db.getConfig("alert_events"));
   return c.json({ webhookUrl, events });
 });
 
 admin.put("/alerts/config", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     webhookUrl?: string;
-    events?: { machine_offline?: boolean; job_failed?: boolean };
+    events?: Partial<AlertEventToggles>;
   };
   const db = new DB(c.env.DB);
   await db.setConfig("alert_webhook_url", (body.webhookUrl ?? "").trim() || null);
@@ -599,6 +601,7 @@ admin.put("/alerts/config", async (c) => {
     JSON.stringify({
       machine_offline: body.events?.machine_offline ?? true,
       job_failed: body.events?.job_failed ?? true,
+      machine_resource: body.events?.machine_resource ?? true,
     }),
   );
   await db.audit({ ts: Date.now(), actor: adminActor(c), action: "alerts.config" });
@@ -636,22 +639,6 @@ function safeTargets(json: string): TriggerTarget[] {
     return Array.isArray(v) ? (v as TriggerTarget[]) : [];
   } catch {
     return [];
-  }
-}
-
-/** Parse the stored alert_events JSON, defaulting both event types to enabled. */
-function parseEvents(json: string | null): {
-  machine_offline: boolean;
-  job_failed: boolean;
-} {
-  try {
-    const v = json ? (JSON.parse(json) as Record<string, unknown>) : {};
-    return {
-      machine_offline: v.machine_offline !== false,
-      job_failed: v.job_failed !== false,
-    };
-  } catch {
-    return { machine_offline: true, job_failed: true };
   }
 }
 

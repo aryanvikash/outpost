@@ -134,12 +134,14 @@ machine offline if no heartbeat (or other message) arrives within **2.5×** the 
     "uptimeSec": 12345,
     "load1": 0.12,
     "memUsedMb": 512,
-    "memTotalMb": 2048
+    "memTotalMb": 2048,
+    "diskUsedMb": 20480,
+    "diskTotalMb": 40960
   }
 }
 ```
 
-`stats` is best-effort; fields may be omitted if unavailable.
+`stats` is best-effort; fields may be omitted if unavailable. `memUsedMb` is total − available. The API keeps the latest `stats` per machine and raises a `machine_resource` alert when memory or disk reaches 90% (cleared below 85%).
 
 ### `log`
 Streamed output during a running job. Chunks for a given `jobId`+`stream` are ordered by

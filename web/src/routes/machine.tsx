@@ -26,7 +26,7 @@ import {
   ACTIONS,
   type Job,
 } from "../api";
-import { timeAgo, formatDuration } from "../util";
+import { timeAgo, formatDuration, usage } from "../util";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -397,6 +397,24 @@ export function MachineDetailPage() {
               <>
                 <span aria-hidden>·</span>
                 <span>agent {machine.agentVersion}</span>
+              </>
+            )}
+            {online && usage(machine?.stats?.memUsedMb, machine?.stats?.memTotalMb) && (
+              <>
+                <span aria-hidden>·</span>
+                <span>mem {usage(machine?.stats?.memUsedMb, machine?.stats?.memTotalMb)}</span>
+              </>
+            )}
+            {online && usage(machine?.stats?.diskUsedMb, machine?.stats?.diskTotalMb) && (
+              <>
+                <span aria-hidden>·</span>
+                <span>disk {usage(machine?.stats?.diskUsedMb, machine?.stats?.diskTotalMb)}</span>
+              </>
+            )}
+            {online && machine?.stats?.load1 !== undefined && (
+              <>
+                <span aria-hidden>·</span>
+                <span>load {machine.stats.load1.toFixed(2)}</span>
               </>
             )}
             <span aria-hidden>·</span>

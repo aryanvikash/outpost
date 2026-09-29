@@ -63,3 +63,45 @@ describe("socket replacement does not flap the machine offline", () => {
     expect(machines.find((m) => m.id === dev.machineId)?.status).toBe("online");
   });
 });
+
+describe("heartbeat stats + resource alert", () => {
+  it("stores the latest stats and alerts once when memory crosses 90%", async () => {
+    const dev = await enrollDevice("stats");
+    const conn = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    conn.webSocket!.accept();
+    const beat = (memUsedMb: number) =>
+      conn.webSocket!.send(JSON.stringify({
+        type: "heartbeat", version: PROTOCOL_VERSION, ts: Date.now(),
+        stats: { memUsedMb, memTotalMb: 1000, diskUsedMb: 1, diskTotalMb: 10 },
+      }));
+    beat(950); await settle();
+    beat(960); await settle();
+
+    const { machines } = (await (await SELF.fetch(adminReq("/api/machines"))).json()) as {
+      machines: Array<{ id: string; stats: { memUsedMb: number } | null }>;
+    };
+    expect(machines.find((m) => m.id === dev.machineId)?.stats?.memUsedMb).toBe(960);
+    const alerts = await env.DB.prepare("select detail from alerts where machine_id = ? and type = 'machine_resource'")
+      .bind(dev.machineId).all();
+    expect(alerts.results).toEqual([{ detail: "memory 95%" }]);
+  });
+});
+
+describe("per-job log cap", () => {
+  it("stores up to ~2 MB, marks the cut, drops the rest", async () => {
+    const dev = await enrollDevice("logcap");
+    const conn = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    conn.webSocket!.accept();
+    const jobId = "j_logcap";
+    const db = new DB(env.DB);
+    await db.insertJob({ id: jobId, machineId: dev.machineId, action: "deploy", paramsJson: "{}", timeoutSec: 60, idempotent: false, createdAt: 1, enqueuedBy: "test" });
+    const chunk = "x".repeat(900 * 1024);
+    for (let seq = 0; seq < 4; seq++) {
+      conn.webSocket!.send(JSON.stringify({ type: "log", version: PROTOCOL_VERSION, jobId, stream: "stdout", seq, chunk }));
+      await settle();
+    }
+    const logs = await db.getLogs(jobId);
+    expect(logs.map((l) => l.seq)).toEqual([0, 1, 2]);
+    expect(logs[2].chunk).toContain("log truncated at 2 MB");
+  });
+});

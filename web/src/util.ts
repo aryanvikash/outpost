@@ -27,3 +27,10 @@ export function formatDuration(createdAt: number | null | undefined, finishedAt:
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
+
+/** "1.5 / 3.7 GB (41%)" from MB counts; null when unknown. */
+export function usage(usedMb: number | undefined, totalMb: number | undefined): string | null {
+  if (!totalMb) return null;
+  const gb = (mb: number) => (mb / 1024).toFixed(1);
+  return `${gb(usedMb ?? 0)} / ${gb(totalMb)} GB (${Math.round(((usedMb ?? 0) / totalMb) * 100)}%)`;
+}

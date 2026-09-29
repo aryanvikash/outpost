@@ -29,6 +29,7 @@ export const machines = sqliteTable(
     deploy_json: text("deploy_json"),
     hooks_json: text("hooks_json"),
     hook_issues_json: text("hook_issues_json"),
+    stats_json: text("stats_json"),
   },
   (t) => ({
     status: index("idx_machines_status").on(t.status),

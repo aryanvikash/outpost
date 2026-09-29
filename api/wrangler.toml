@@ -38,7 +38,7 @@ migrations_dir = "migrations"
 # Non-secret config. Secrets (ADMIN_TOKEN) are set via `wrangler secret put`.
 [vars]
 HEARTBEAT_SEC = "30"
-DEFAULT_JOB_TIMEOUT_SEC = "300"
+DEFAULT_JOB_TIMEOUT_SEC = "1800"
 # Max age a job may sit queued before it is expired instead of dispatched — guards
 # against deploying a stale commit when an agent reconnects after a long outage.
 MAX_QUEUE_AGE_SEC = "3600"

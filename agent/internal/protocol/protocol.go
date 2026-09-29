@@ -75,10 +75,12 @@ type HookIssue struct {
 
 // HostStats is best-effort host telemetry sent with heartbeats.
 type HostStats struct {
-	UptimeSec  uint64  `json:"uptimeSec,omitempty"`
-	Load1      float64 `json:"load1,omitempty"`
-	MemUsedMb  uint64  `json:"memUsedMb,omitempty"`
-	MemTotalMb uint64  `json:"memTotalMb,omitempty"`
+	UptimeSec   uint64  `json:"uptimeSec,omitempty"`
+	Load1       float64 `json:"load1,omitempty"`
+	MemUsedMb   uint64  `json:"memUsedMb,omitempty"`
+	MemTotalMb  uint64  `json:"memTotalMb,omitempty"`
+	DiskUsedMb  uint64  `json:"diskUsedMb,omitempty"`
+	DiskTotalMb uint64  `json:"diskTotalMb,omitempty"`
 }
 
 // Heartbeat is a periodic liveness ping.

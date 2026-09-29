@@ -127,10 +127,10 @@ export class DB {
       .where(eq(machines.id, id));
   }
 
-  async touchMachine(id: string, lastSeen: number): Promise<void> {
+  async touchMachine(id: string, lastSeen: number, statsJson?: string): Promise<void> {
     await this.db
       .update(machines)
-      .set({ last_seen: lastSeen })
+      .set(statsJson === undefined ? { last_seen: lastSeen } : { last_seen: lastSeen, stats_json: statsJson })
       .where(eq(machines.id, id));
   }
 
