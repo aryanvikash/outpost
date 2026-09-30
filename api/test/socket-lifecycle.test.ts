@@ -1,4 +1,4 @@
-import { SELF, env } from "cloudflare:test";
+import { SELF, env, runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 import { adminReq, enrollDevice, signConnectJwt, connectReq } from "./helpers";
 import { DB } from "../src/db/index";
@@ -136,5 +136,45 @@ describe("the old socket closing late after a reconnect", () => {
       machines: Array<{ id: string; status: string }>;
     };
     expect(machines.find((m) => m.id === dev.machineId)?.status).toBe("online");
+  });
+});
+
+describe("offline alert grace period", () => {
+  const offlineAlerts = async (id: string) =>
+    (await env.DB.prepare("select id from alerts where machine_id = ? and type = 'machine_offline'").bind(id).all()).results.length;
+  const age = (id: string) =>
+    runInDurableObject(env.MACHINE_DO.get(env.MACHINE_DO.idFromName(id)), async (_i, state) => {
+      const p = await state.storage.get<{ ts: number; reason: string }>("pendingOffline");
+      if (p) await state.storage.put("pendingOffline", { ...p, ts: p.ts - 200_000 });
+    });
+
+  it("holds the alert, then fires it when the agent stays away", async () => {
+    const dev = await enrollDevice("grace-away");
+    const c = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    c.webSocket!.accept();
+    await settle();
+    c.webSocket!.close(1001, "going away");
+    await settle();
+    expect(await offlineAlerts(dev.machineId)).toBe(0);
+    await age(dev.machineId);
+    await runDurableObjectAlarm(env.MACHINE_DO.get(env.MACHINE_DO.idFromName(dev.machineId)));
+    await settle();
+    expect(await offlineAlerts(dev.machineId)).toBe(1);
+  });
+
+  it("drops the alert when the agent reconnects in time", async () => {
+    const dev = await enrollDevice("grace-back");
+    const c1 = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    c1.webSocket!.accept();
+    await settle();
+    c1.webSocket!.close(1001, "restart");
+    await settle();
+    const c2 = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    c2.webSocket!.accept();
+    await settle();
+    await age(dev.machineId);
+    await runDurableObjectAlarm(env.MACHINE_DO.get(env.MACHINE_DO.idFromName(dev.machineId)));
+    await settle();
+    expect(await offlineAlerts(dev.machineId)).toBe(0);
   });
 });

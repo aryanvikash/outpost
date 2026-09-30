@@ -49,6 +49,8 @@ const COALESCE_ACTIONS = new Set(["deploy"]);
 // interrupted mid-run by an agent disconnect. Bounded so a repeatedly-crashing
 // agent can't replay the same job forever.
 export const MAX_JOB_RETRIES = 1;
+/** An offline alert waits this long; a reconnect in time (restart, deploy, blip) cancels it. */
+export const OFFLINE_ALERT_GRACE_MS = 120_000;
 /** Stored log per job (chars ≈ bytes for log text). */
 export const MAX_LOG_BYTES = 2 * 1024 * 1024;
 
@@ -151,6 +153,7 @@ export class MachineDO extends DurableObject<Env> {
     server.serializeAttachment({ role: "agent", machineId, agentVersion } satisfies Attachment);
 
     const now = Date.now();
+    await this.ctx.storage.delete("pendingOffline");
     await this.db.setMachineStatus(machineId, "online", now, agentVersion);
     await this.db.audit({
       ts: now,
@@ -432,6 +435,7 @@ export class MachineDO extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     const machineId = await this.getMachineId();
     if (!machineId) return;
+    await this.flushPendingOffline(machineId);
     if (this.agentSocket() === null) {
       await this.markOfflineAndAlert(machineId, Date.now(), "no live connection");
       return;
@@ -658,7 +662,22 @@ export class MachineDO extends DurableObject<Env> {
     const wasOnline = m?.status === "online";
     await this.db.setMachineStatus(machineId, "offline", ts);
     if (wasOnline) {
-      this.notify({ type: "machine_offline", machineId, ts, detail: reason });
+      await this.ctx.storage.put("pendingOffline", { ts, reason });
+      await this.ctx.storage.setAlarm(Date.now() + OFFLINE_ALERT_GRACE_MS);
+    }
+  }
+
+  /** Fire a held offline alert once the grace period ran out with no agent back. */
+  private async flushPendingOffline(machineId: string): Promise<void> {
+    const p = await this.ctx.storage.get<{ ts: number; reason: string }>("pendingOffline");
+    if (!p) return;
+    if (Date.now() - p.ts < OFFLINE_ALERT_GRACE_MS) {
+      await this.ctx.storage.setAlarm(p.ts + OFFLINE_ALERT_GRACE_MS);
+      return;
+    }
+    await this.ctx.storage.delete("pendingOffline");
+    if (this.agentSocket() === null) {
+      this.notify({ type: "machine_offline", machineId, ts: p.ts, detail: p.reason });
     }
   }
 

@@ -419,7 +419,7 @@ export class DB {
 
   /**
    * Delete history older than the cutoffs, keeping D1 bounded. Append-only
-   * tables (job_logs, audit_log, webhook_deliveries) prune by their timestamp;
+   * tables (job_logs, audit_log, webhook_deliveries, alerts) prune by their timestamp;
    * jobs prune only once finished (never mid-flight); the dedup table uses a
    * shorter window since it only needs to outlive a provider's retry window.
    * job_logs are deleted before jobs to respect the FK. Returns per-table
@@ -435,6 +435,7 @@ export class DB {
     auditLog: number;
     webhookDeliveries: number;
     webhookDedup: number;
+    alerts: number;
   }> {
     const logs = await this.db.delete(jobLogs).where(lt(jobLogs.ts, cutoffMs));
     const finished = await this.db
@@ -447,7 +448,9 @@ export class DB {
     const dedup = await this.db
       .delete(webhookDedup)
       .where(lt(webhookDedup.ts, dedupCutoffMs));
+    const old = await this.db.delete(alerts).where(lt(alerts.ts, cutoffMs));
     return {
+      alerts: old.meta.changes ?? 0,
       jobLogs: logs.meta.changes ?? 0,
       jobs: finished.meta.changes ?? 0,
       auditLog: audit.meta.changes ?? 0,
