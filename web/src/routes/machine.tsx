@@ -26,7 +26,8 @@ import {
   ACTIONS,
   type Job,
 } from "../api";
-import { timeAgo, formatDuration, usage } from "../util";
+import { timeAgo, formatDuration, usageTone } from "../util";
+import type { HostStats } from "../api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +69,87 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="mb-3 text-sm font-medium">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function Ring({ pct }: { pct: number }) {
+  const r = 18;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg viewBox="0 0 44 44" className={cn("h-12 w-12 shrink-0 -rotate-90", usageTone(pct))} aria-hidden>
+      <circle cx="22" cy="22" r={r} fill="none" strokeWidth="4" className="stroke-muted" />
+      <circle
+        cx="22" cy="22" r={r} fill="none" strokeWidth="4" strokeLinecap="round"
+        stroke="currentColor" strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(pct, 100) / 100)}
+        className="transition-[stroke-dashoffset] duration-700 ease-out"
+      />
+    </svg>
+  );
+}
+
+const gb = (mb: number) => (mb >= 10240 ? (mb / 1024).toFixed(0) : (mb / 1024).toFixed(1));
+
+function uptime(sec: number): string {
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  if (d >= 1) return `${d}d ${h}h`;
+  return `${h}h ${Math.floor((sec % 3600) / 60)}m`;
+}
+
+function Tile({ label, children, stale }: { label: string; children: React.ReactNode; stale: boolean }) {
+  return (
+    <div className={cn("flex min-h-[76px] items-center gap-3 rounded-lg border border-border px-4 py-3", stale && "opacity-50")}>
+      {children}
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
+function Usage({ label, used, total, stale }: { label: string; used?: number; total?: number; stale: boolean }) {
+  if (!total) return null;
+  const pct = Math.round(((used ?? 0) / total) * 100);
+  return (
+    <Tile label={label} stale={stale}>
+      <div className="relative">
+        <Ring pct={pct} />
+        <span className="absolute inset-0 grid place-items-center text-[11px] font-medium tabular-nums">{pct}%</span>
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-medium tabular-nums">
+          {gb(used ?? 0)} <span className="text-muted-foreground">/ {gb(total)} GB</span>
+        </p>
+      </div>
+    </Tile>
+  );
+}
+
+function Stat({ label, value, hint, stale }: { label: string; value: string; hint: string; stale: boolean }) {
+  return (
+    <Tile label={label} stale={stale}>
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-lg font-medium leading-tight tabular-nums">{value}</p>
+        <p className="truncate text-[11px] text-muted-foreground/70">{hint}</p>
+      </div>
+    </Tile>
+  );
+}
+
+/** Latest heartbeat telemetry. Offline machines keep their last reading, dimmed. */
+function Resources({ stats, stale }: { stats: HostStats; stale: boolean }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Usage label="Memory" used={stats.memUsedMb} total={stats.memTotalMb} stale={stale} />
+      <Usage label="Disk (/)" used={stats.diskUsedMb} total={stats.diskTotalMb} stale={stale} />
+      {/* The agent omits zero values, so a present uptime with no load means 0.00. */}
+      {stats.uptimeSec !== undefined && (
+        <Stat label="Load" value={(stats.load1 ?? 0).toFixed(2)} hint="1-minute average" stale={stale} />
+      )}
+      {stats.uptimeSec !== undefined && (
+        <Stat label="Uptime" value={uptime(stats.uptimeSec)} hint={stale ? "at last heartbeat" : "since last boot"} stale={stale} />
+      )}
+    </div>
   );
 }
 
@@ -399,24 +481,6 @@ export function MachineDetailPage() {
                 <span>agent {machine.agentVersion}</span>
               </>
             )}
-            {online && usage(machine?.stats?.memUsedMb, machine?.stats?.memTotalMb) && (
-              <>
-                <span aria-hidden>·</span>
-                <span>mem {usage(machine?.stats?.memUsedMb, machine?.stats?.memTotalMb)}</span>
-              </>
-            )}
-            {online && usage(machine?.stats?.diskUsedMb, machine?.stats?.diskTotalMb) && (
-              <>
-                <span aria-hidden>·</span>
-                <span>disk {usage(machine?.stats?.diskUsedMb, machine?.stats?.diskTotalMb)}</span>
-              </>
-            )}
-            {online && machine?.stats?.load1 !== undefined && (
-              <>
-                <span aria-hidden>·</span>
-                <span>load {machine.stats.load1.toFixed(2)}</span>
-              </>
-            )}
             <span aria-hidden>·</span>
             <span className="flex items-center gap-0.5">
               <code className="font-mono">{machineId}</code>
@@ -472,6 +536,12 @@ export function MachineDetailPage() {
 
       <div className="mt-6">
         <TabPanel id="overview" active={tab === "overview"}>
+          {machine?.stats && Object.keys(machine.stats).length > 0 && (
+            <Section title="Resources">
+              <Resources stats={machine.stats} stale={!online} />
+            </Section>
+          )}
+
           <Section title="Run an action">
             <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center">
               <Select value={action} onValueChange={(v) => { setAction(v); setActionError(null); }}>

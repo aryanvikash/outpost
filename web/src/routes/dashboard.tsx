@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Plus, Copy, Check, Loader2, ChevronRight, Server, RefreshCw, Search } from "lucide-react";
 import { listMachines, createEnrollToken, apiBase, type Machine } from "../api";
-import { timeAgo } from "../util";
+import { timeAgo, usageTone } from "../util";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -195,6 +195,23 @@ function Stat({ label, value, live }: { label: string; value: number; live?: boo
   );
 }
 
+function Meter({ label, used, total }: { label: string; used?: number; total?: number }) {
+  if (!total) return <div />;
+  const pct = Math.min(100, Math.round(((used ?? 0) / total) * 100));
+  return (
+    <div className={usageTone(pct)}>
+      <div className="mb-1 flex items-baseline justify-between text-[11px]">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="tabular-nums">{pct}%</span>
+      </div>
+      <svg viewBox="0 0 100 4" preserveAspectRatio="none" className="h-1 w-full" aria-hidden>
+        <rect width="100" height="4" rx="2" className="fill-muted" />
+        <rect width={pct} height="4" rx="2" fill="currentColor" />
+      </svg>
+    </div>
+  );
+}
+
 function MachineCard({ m }: { m: Machine }) {
   const online = m.status === "online";
   return (
@@ -231,6 +248,12 @@ function MachineCard({ m }: { m: Machine }) {
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
       </div>
+      {online && m.stats && (m.stats.memTotalMb || m.stats.diskTotalMb) ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Meter label="mem" used={m.stats.memUsedMb} total={m.stats.memTotalMb} />
+          <Meter label="disk" used={m.stats.diskUsedMb} total={m.stats.diskTotalMb} />
+        </div>
+      ) : null}
       <div className="flex items-center gap-2 border-t border-border pt-3">
         <code className="truncate rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
           {m.id}

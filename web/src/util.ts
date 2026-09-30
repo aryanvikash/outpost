@@ -28,9 +28,9 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
-/** "1.5 / 3.7 GB (41%)" from MB counts; null when unknown. */
-export function usage(usedMb: number | undefined, totalMb: number | undefined): string | null {
-  if (!totalMb) return null;
-  const gb = (mb: number) => (mb / 1024).toFixed(1);
-  return `${gb(usedMb ?? 0)} / ${gb(totalMb)} GB (${Math.round(((usedMb ?? 0) / totalMb) * 100)}%)`;
+/** Colour for a usage %: red at the API's 90% machine_resource alert, amber from 75%. */
+export function usageTone(pct: number): string {
+  if (pct >= 90) return "text-destructive";
+  if (pct >= 75) return "text-amber-400";
+  return "text-emerald-500";
 }
