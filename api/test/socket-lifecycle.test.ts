@@ -105,3 +105,36 @@ describe("per-job log cap", () => {
     expect(logs[2].chunk).toContain("log truncated at 2 MB");
   });
 });
+
+describe("a heartbeat heals a stale offline status", () => {
+  it("marks the machine online again", async () => {
+    const dev = await enrollDevice("heal");
+    const conn = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    conn.webSocket!.accept();
+    await settle();
+    await new DB(env.DB).setMachineStatus(dev.machineId, "offline", Date.now());
+    conn.webSocket!.send(JSON.stringify({ type: "heartbeat", version: PROTOCOL_VERSION, ts: Date.now() }));
+    await settle();
+    const { machines } = (await (await SELF.fetch(adminReq("/api/machines"))).json()) as {
+      machines: Array<{ id: string; status: string }>;
+    };
+    expect(machines.find((m) => m.id === dev.machineId)?.status).toBe("online");
+  });
+});
+
+describe("the old socket closing late after a reconnect", () => {
+  it("does not mark the machine offline", async () => {
+    const dev = await enrollDevice("late-close");
+    const c1 = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    c1.webSocket!.accept();
+    const c2 = await SELF.fetch(connectReq(await signConnectJwt(dev), dev.machineId));
+    c2.webSocket!.accept();
+    // The dead process's socket closes with its own code, not the DO's 4002.
+    try { c1.webSocket!.close(1001, "going away"); } catch { /* already closed */ }
+    await settle();
+    const { machines } = (await (await SELF.fetch(adminReq("/api/machines"))).json()) as {
+      machines: Array<{ id: string; status: string }>;
+    };
+    expect(machines.find((m) => m.id === dev.machineId)?.status).toBe("online");
+  });
+});

@@ -415,7 +415,7 @@ export class MachineDO extends DurableObject<Env> {
 
   override async webSocketClose(ws: WebSocket, code: number): Promise<void> {
     // A viewer leaving must not affect machine/job state.
-    if (att(ws)?.role === "agent") await this.handleDisconnect(code);
+    if (att(ws)?.role === "agent") await this.handleDisconnect(ws, code);
     try {
       ws.close();
     } catch {
@@ -425,7 +425,7 @@ export class MachineDO extends DurableObject<Env> {
 
   override async webSocketError(ws: WebSocket): Promise<void> {
     // An error is a genuine failure (no intentional close code).
-    if (att(ws)?.role === "agent") await this.handleDisconnect();
+    if (att(ws)?.role === "agent") await this.handleDisconnect(ws);
   }
 
   /** Liveness alarm: if no heartbeat within 2.5× interval, mark offline. */
@@ -669,16 +669,23 @@ export class MachineDO extends DurableObject<Env> {
    * (deploy/run-hook) is retried up to MAX_JOB_RETRIES, then given up as
    * interrupted with an alert. Per PROTOCOL.md §6.
    */
-  private async handleDisconnect(closeCode?: number): Promise<void> {
+  private async handleDisconnect(closed: WebSocket, closeCode?: number): Promise<void> {
     const machineId = await this.getMachineId();
     if (!machineId) return;
+
 
     // Intentional internal closes don't mean the machine went offline: 4002
     // replaces this socket with a newer connection (still online), and 4003 is a
     // revoke that already marked it offline and cancelled its jobs. In those
     // cases we still reconcile any orphaned in-flight job below, but must not
     // mark offline or fire a machine_offline alert.
-    const replacedOrRevoked = closeCode === 4002 || closeCode === 4003;
+    // An agent restart reconnects before the old socket's close arrives, and that
+    // late close carries the client's code (e.g. 1006), not our 4002: a newer live
+    // agent socket means this one was replaced all the same.
+    const replaced = this.ctx.getWebSockets().some(
+      (s) => s !== closed && att(s)?.role === "agent" && s.readyState === WebSocket.OPEN,
+    );
+    const replacedOrRevoked = replaced || closeCode === 4002 || closeCode === 4003;
 
     const inFlight = this.q
       .select()

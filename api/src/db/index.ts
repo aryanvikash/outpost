@@ -130,7 +130,8 @@ export class DB {
   async touchMachine(id: string, lastSeen: number, statsJson?: string): Promise<void> {
     await this.db
       .update(machines)
-      .set(statsJson === undefined ? { last_seen: lastSeen } : { last_seen: lastSeen, stats_json: statsJson })
+      // A heartbeat only comes over a live agent socket, so it also heals a stale "offline".
+      .set(statsJson === undefined ? { last_seen: lastSeen, status: "online" } : { last_seen: lastSeen, status: "online", stats_json: statsJson })
       .where(eq(machines.id, id));
   }
 
